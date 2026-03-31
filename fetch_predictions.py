@@ -9,6 +9,7 @@ FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 ODDS_KEY     = os.environ.get("ODDS_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
+# gemini-2.5-flash = current free tier model (250 req/day)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 today     = datetime.utcnow()
@@ -24,30 +25,24 @@ def fmt(d): return d.strftime("%Y-%m-%d")
 #   C = API-Football season averages (good)
 # ══════════════════════════════════════════
 
+# ── FOCUSED ON 7 BEST LEAGUES WITH REAL PER-GAME SOT DATA ──
+# Tier A = Understat (real SOT per game — top 5 leagues)
+# Tier B = FBref (real SOT per game — European competitions)
 LEAGUES = {
-    # API-Football ID : config
-    39:  {"key":"pl",          "name":"Premier League",      "country":"England",     "tier":"A", "understat":"EPL",         "fbref":"9",  "odds":"soccer_epl"},
-    140: {"key":"laliga",      "name":"La Liga",             "country":"Spain",       "tier":"A", "understat":"La_liga",     "fbref":"12", "odds":"soccer_spain_la_liga"},
-    78:  {"key":"bundesliga",  "name":"Bundesliga",          "country":"Germany",     "tier":"A", "understat":"Bundesliga",  "fbref":"20", "odds":"soccer_germany_bundesliga"},
-    135: {"key":"seriea",      "name":"Serie A",             "country":"Italy",       "tier":"A", "understat":"Serie_A",     "fbref":"11", "odds":"soccer_italy_serie_a"},
-    61:  {"key":"ligue1",      "name":"Ligue 1",             "country":"France",      "tier":"A", "understat":"Ligue_1",     "fbref":"13", "odds":"soccer_france_ligue_one"},
-    # FBref tier B
-    2:   {"key":"ucl",         "name":"Champions League",    "country":"Europe",      "tier":"B", "fbref":"8",  "odds":"soccer_uefa_champs_league"},
-    3:   {"key":"uel",         "name":"Europa League",       "country":"Europe",      "tier":"B", "fbref":"19", "odds":"soccer_uefa_europa_league"},
-    848: {"key":"uecl",        "name":"Conference League",   "country":"Europe",      "tier":"B", "fbref":"882","odds":"soccer_uefa_europa_conference_league"},
-    # API-Football tier C (season averages)
-    40:  {"key":"championship","name":"Championship",        "country":"England",     "tier":"C", "odds":"soccer_england_championship"},
-    41:  {"key":"league1",     "name":"League One",          "country":"England",     "tier":"C"},
-    88:  {"key":"eredivisie",  "name":"Eredivisie",          "country":"Netherlands", "tier":"C", "odds":"soccer_netherlands_eredivisie"},
-    144: {"key":"jupiler",     "name":"Jupiler Pro League",  "country":"Belgium",     "tier":"C", "odds":"soccer_belgium_first_div_a"},
-    203: {"key":"superlig",    "name":"Süper Lig",           "country":"Turkey",      "tier":"C", "odds":"soccer_turkey_super_league"},
-    94:  {"key":"primavera",   "name":"Primeira Liga",       "country":"Portugal",    "tier":"C", "odds":"soccer_portugal_primeira_liga"},
-    119: {"key":"superligadk", "name":"Superliga",           "country":"Denmark",     "tier":"C"},
-    113: {"key":"allsvenskan", "name":"Allsvenskan",         "country":"Sweden",      "tier":"C"},
-    235: {"key":"rpl",         "name":"Russian PL",          "country":"Russia",      "tier":"C"},
-    197: {"key":"csl",         "name":"Super Lig",           "country":"Greece",      "tier":"C"},
-    218: {"key":"ligamx",      "name":"Liga MX",             "country":"Mexico",      "tier":"C"},
-    253: {"key":"mls",         "name":"MLS",                 "country":"USA",         "tier":"C", "odds":"soccer_usa_mls"},
+    39:  {"key":"pl",         "name":"Premier League",   "flag":"🏴󠁧󠁢󠁥󠁮󠁧󠁿", "country":"England", "tier":"A",
+          "understat":"EPL",       "odds":"soccer_epl"},
+    140: {"key":"laliga",     "name":"La Liga",          "flag":"🇪🇸", "country":"Spain",   "tier":"A",
+          "understat":"La_liga",   "odds":"soccer_spain_la_liga"},
+    78:  {"key":"bundesliga", "name":"Bundesliga",       "flag":"🇩🇪", "country":"Germany", "tier":"A",
+          "understat":"Bundesliga","odds":"soccer_germany_bundesliga"},
+    135: {"key":"seriea",     "name":"Serie A",          "flag":"🇮🇹", "country":"Italy",   "tier":"A",
+          "understat":"Serie_A",   "odds":"soccer_italy_serie_a"},
+    61:  {"key":"ligue1",     "name":"Ligue 1",          "flag":"🇫🇷", "country":"France",  "tier":"A",
+          "understat":"Ligue_1",   "odds":"soccer_france_ligue_one"},
+    2:   {"key":"ucl",        "name":"Champions League", "flag":"⭐", "country":"Europe",  "tier":"B",
+          "fbref":"8",             "odds":"soccer_uefa_champs_league"},
+    3:   {"key":"uel",        "name":"Europa League",    "flag":"🟠", "country":"Europe",  "tier":"B",
+          "fbref":"19",            "odds":"soccer_uefa_europa_league"},
 }
 
 ROLE_FACTORS = {
@@ -76,7 +71,12 @@ def get_understat_players(league_name):
         r = requests.get(url, headers=US_HEADERS, timeout=20)
         match = re.search(r"var playersData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not match: return {}
-        raw  = match.group(1).encode('utf-8').decode('unicode_escape')
+        raw  = match.group(1)
+        # Safe unicode decode
+        try:
+            raw = raw.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            raw = raw.encode('raw_unicode_escape').decode('unicode_escape')
         data = json.loads(raw)
         out  = {}
         for p in data:
@@ -105,7 +105,11 @@ def us_player_history(pid, pname):
         r = requests.get(f"https://understat.com/player/{pid}", headers=US_HEADERS, timeout=15)
         m = re.search(r"var matchesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not m: return [],[]
-        raw = m.group(1).encode('utf-8').decode('unicode_escape')
+        raw = m.group(1)
+        try:
+            raw = raw.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            raw = raw.encode('raw_unicode_escape').decode('unicode_escape')
         matches = [x for x in json.loads(raw) if x.get("season") in ["2025","2024"]]
         recent = matches[-6:] if len(matches)>=6 else matches
         form, details = [],[]
@@ -125,7 +129,11 @@ def us_yesterday_sot(pid, match_date):
         r = requests.get(f"https://understat.com/player/{pid}", headers=US_HEADERS, timeout=15)
         m = re.search(r"var matchesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not m: return None
-        raw = m.group(1).encode('utf-8').decode('unicode_escape')
+        raw = m.group(1)
+        try:
+            raw = raw.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            raw = raw.encode('raw_unicode_escape').decode('unicode_escape')
         for x in json.loads(raw):
             if x.get("date","")[:10] == match_date:
                 sot = int(x.get("shots_on_target",0) or 0)
@@ -141,8 +149,8 @@ def us_yesterday_sot(pid, match_date):
 fbref_cache = {}
 
 FBREF_LEAGUE_URLS = {
-    "8":  "https://fbref.com/en/comps/8/shooting/2025-2026/Champions-League-Stats",
-    "19": "https://fbref.com/en/comps/19/shooting/2025-2026/Europa-League-Stats",
+    "8":  "https://fbref.com/en/comps/8/2025-2026/shooting/2025-2026-Champions-League-Stats",
+    "19": "https://fbref.com/en/comps/19/2025-2026/shooting/2025-2026-Europa-League-Stats",
     "882":"https://fbref.com/en/comps/882/shooting/2025-2026/UEFA-Europa-Conference-League-Stats",
 }
 
@@ -160,7 +168,8 @@ def get_fbref_players(fbref_id):
         # FBref hides table in HTML comments — strip them
         html = r.text.replace("<!--","").replace("-->","")
         soup = BeautifulSoup(html, "html.parser")
-        table = soup.find("table", {"id": re.compile("stats_shooting")})
+        table = (soup.find("table", {"id": re.compile("stats_shooting")}) or
+                 soup.find("table", id=lambda x: x and "shooting" in x))
         if not table:
             print(f"  FBref: no shooting table for {fbref_id}")
             return {}
@@ -368,7 +377,8 @@ def update_history(y_matches, history):
                 "league":m["league"],"verdict":p["verdict"],
                 "line":p["line"],"prob":p["prob"],"ev":p["ev"],
                 "xsot":p["xsot"],"actualSOT":p["actualSOT"],
-                "hit":p.get("hit",False),"banker":p.get("banker",False)
+                "hit":p.get("hit",False),"banker":p.get("banker",False),
+                "oddsCurrent":p.get("oddsCurrent",1.8)
             })
     if entries:
         history["predictions"].extend(entries)
@@ -469,7 +479,7 @@ def process_fixtures(fixtures, day_label, match_date_str):
     count   = 0
     for fix in fixtures:
         lid = fix["league"]["id"]
-        if lid not in LEAGUES or count>=6: continue
+        if lid not in LEAGUES or count>=8: continue
         count += 1
         lg         = LEAGUES[lid]
         tier       = lg["tier"]
@@ -619,7 +629,7 @@ def ai_insight(today_matches, hist_summary):
                 f"Banker hit rate {hs.get('banker',{}).get('rate','N/A')}%, "
                 f"ROI {hs.get('roi',0)}% over {hs.get('daysTracked',0)} days.")
 
-    prompt = f"""You are a sharp football shots-on-target betting analyst.
+    prompt = f"""You are an elite football shots-on-target betting analyst with access to real per-game SOT data.
 {track}
 BANKER picks: {', '.join(bankers[:3]) if bankers else 'None'}
 Safe picks: {', '.join(safe[:4]) if safe else 'None'}
@@ -630,10 +640,22 @@ Write exactly 3 sentences:
 2. Key risk or match to avoid
 3. Confidence level in today's overall card
 Max 90 words. Be sharp and specific."""
-    try:
-        return model.generate_content(prompt).text.strip()
-    except Exception as e:
-        return f"AI analysis unavailable: {str(e)}"
+    for attempt in range(3):
+        try:
+            resp = model.generate_content(prompt)
+            return resp.text.strip()
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "quota" in err.lower():
+                print(f"  Gemini rate limit hit, waiting 30s...")
+                time.sleep(30)
+            elif "404" in err:
+                print(f"  Gemini model not found: {err}")
+                return "AI analysis unavailable: model not found. Check GEMINI_API_KEY and model name."
+            else:
+                print(f"  Gemini error: {err}")
+                return f"AI analysis unavailable: {err}"
+    return "AI analysis unavailable: quota exceeded after retries."
 
 def ai_results_summary(y_matches):
     hits=[]; misses=[]
@@ -648,8 +670,11 @@ Hits ✓: {', '.join(hits[:5]) if hits else 'None'}
 Misses ✗: {', '.join(misses[:5]) if misses else 'None'}
 2 sentences: performance summary and key lesson. Max 50 words."""
     try:
-        return model.generate_content(prompt).text.strip()
-    except: return ""
+        resp = model.generate_content(prompt)
+        return resp.text.strip()
+    except Exception as e:
+        print(f"  Results summary AI err: {e}")
+        return ""
 
 # ══════════════════════════════════════════
 # MAIN
@@ -658,6 +683,13 @@ Misses ✗: {', '.join(misses[:5]) if misses else 'None'}
 print("="*55)
 print(f"SOTIQ Bot — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
 print("="*55)
+# Safety: limit total run time to avoid GitHub Actions timeout
+import signal
+def timeout_handler(signum, frame):
+    print("\n⚠️  Run time limit reached — saving partial data")
+    raise SystemExit(0)
+signal.signal(signal.SIGALRM, timeout_handler)
+signal.alarm(300)  # 5 minute hard limit
 
 print("\nLoading history...")
 history = load_history()
