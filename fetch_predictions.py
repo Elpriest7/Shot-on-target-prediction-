@@ -9,7 +9,7 @@ FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 ODDS_KEY     = os.environ.get("ODDS_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 today     = datetime.utcnow()
 yesterday = today - timedelta(days=1)
@@ -72,7 +72,7 @@ def get_understat_players(league_name):
     if league_name in us_cache:
         return us_cache[league_name]
     try:
-        url = f"https://understat.com/league/{league_name}/2024"
+        url = f"https://understat.com/league/{league_name}/2025"
         r = requests.get(url, headers=US_HEADERS, timeout=20)
         match = re.search(r"var playersData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not match: return {}
@@ -106,7 +106,7 @@ def us_player_history(pid, pname):
         m = re.search(r"var matchesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not m: return [],[]
         raw = m.group(1).encode('utf-8').decode('unicode_escape')
-        matches = [x for x in json.loads(raw) if x.get("season")=="2024"]
+        matches = [x for x in json.loads(raw) if x.get("season")=="2025"]
         recent = matches[-6:] if len(matches)>=6 else matches
         form, details = [],[]
         for x in reversed(recent):
@@ -404,17 +404,22 @@ def calc_summary(preds):
 # ══════════════════════════════════════════
 
 def get_fixtures(date_str):
-    try:
-        r = requests.get(f"{BASE}/fixtures",headers=F_HEADERS,
-                        params={"date":date_str,"season":2024},timeout=15)
-        return r.json().get("response",[])
-    except Exception as e:
-        print(f"  Fixtures err: {e}"); return []
+    for season in [2025, 2024]:
+        try:
+            r = requests.get(f"{BASE}/fixtures",headers=F_HEADERS,
+                            params={"date":date_str,"season":season},timeout=15)
+            data = r.json().get("response",[])
+            if data:
+                print(f"  Fixtures found for season {season}")
+                return data
+        except Exception as e:
+            print(f"  Fixtures err season {season}: {e}")
+    return []
 
 def get_team_players_api(team_id, league_id):
     try:
         r = requests.get(f"{BASE}/players",headers=F_HEADERS,
-                        params={"team":team_id,"season":2024,"league":league_id},timeout=15)
+                        params={"team":team_id,"season":2025,"league":league_id},timeout=15)
         data = r.json().get("response",[])
         result = []
         for p in data:
