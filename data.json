@@ -1,5 +1,5 @@
 {
-  "updated": "2026-03-31T17:32:03.176938Z",
+  "updated": "2026-03-31T22:16:46.239979Z",
   "aiInsight": "AI analysis unavailable: 404 models/gemini-1.5-flash-latest is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.",
   "resultsSummary": "",
   "hitRate": null,
