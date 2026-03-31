@@ -106,7 +106,7 @@ def us_player_history(pid, pname):
         m = re.search(r"var matchesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
         if not m: return [],[]
         raw = m.group(1).encode('utf-8').decode('unicode_escape')
-        matches = [x for x in json.loads(raw) if x.get("season")=="2025"]
+        matches = [x for x in json.loads(raw) if x.get("season") in ["2025","2024"]]
         recent = matches[-6:] if len(matches)>=6 else matches
         form, details = [],[]
         for x in reversed(recent):
@@ -141,9 +141,9 @@ def us_yesterday_sot(pid, match_date):
 fbref_cache = {}
 
 FBREF_LEAGUE_URLS = {
-    "8":  "https://fbref.com/en/comps/8/shooting/Champions-League-Stats",
-    "19": "https://fbref.com/en/comps/19/shooting/Europa-League-Stats",
-    "882":"https://fbref.com/en/comps/882/shooting/UEFA-Europa-Conference-League-Stats",
+    "8":  "https://fbref.com/en/comps/8/shooting/2025-2026/Champions-League-Stats",
+    "19": "https://fbref.com/en/comps/19/shooting/2025-2026/Europa-League-Stats",
+    "882":"https://fbref.com/en/comps/882/shooting/2025-2026/UEFA-Europa-Conference-League-Stats",
 }
 
 def get_fbref_players(fbref_id):
