@@ -9,7 +9,7 @@ FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 ODDS_KEY     = os.environ.get("ODDS_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 today     = datetime.utcnow()
 yesterday = today - timedelta(days=1)
@@ -404,17 +404,16 @@ def calc_summary(preds):
 # ══════════════════════════════════════════
 
 def get_fixtures(date_str):
-    for season in [2025, 2024]:
-        try:
-            r = requests.get(f"{BASE}/fixtures",headers=F_HEADERS,
-                            params={"date":date_str,"season":season},timeout=15)
-            data = r.json().get("response",[])
-            if data:
-                print(f"  Fixtures found for season {season}")
-                return data
-        except Exception as e:
-            print(f"  Fixtures err season {season}: {e}")
-    return []
+    try:
+        # No season filter - get all fixtures for the date across all seasons
+        r = requests.get(f"{BASE}/fixtures",headers=F_HEADERS,
+                        params={"date":date_str},timeout=15)
+        data = r.json().get("response",[])
+        print(f"  Found {len(data)} fixtures for {date_str}")
+        return data
+    except Exception as e:
+        print(f"  Fixtures err: {e}")
+        return []
 
 def get_team_players_api(team_id, league_id):
     try:
