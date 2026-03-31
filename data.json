@@ -1,5 +1,11 @@
 {
-  "updated": "2026-03-31T00:55:15.986824Z",
+  "updated": "2026-03-31T07:12:31.275619Z",
   "aiInsight": "No matches today for analysis.",
+  "stats": {
+    "safe": 0,
+    "positiveEV": 0,
+    "value": 0,
+    "avoid": 0
+  },
   "matches": []
 }
