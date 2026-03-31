@@ -21,8 +21,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests google-generativeai
+        run: pip install requests google-generativeai
 
       - name: Run predictions script
         env:
@@ -35,5 +34,5 @@ jobs:
           git config user.name "SOTIQ Bot"
           git config user.email "bot@sotiq.com"
           git add data.json
-          git commit -m "Auto-update predictions $(date -u '+%Y-%m-%d %H:%M')" || echo "No changes"
+          git commit -m "Auto-update predictions" || echo "No changes"
           git push
