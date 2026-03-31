@@ -27,13 +27,14 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python fetch_predictions.py
 
-      - name: Commit and push data.json
+      - name: Commit and push
         run: |
           git config user.name "SOTIQ Bot"
           git config user.email "bot@sotiq.com"
-          git add data.json
-          git commit -m "Auto-update predictions" || echo "No changes"
+          git add data.json history.json || true
+          git commit -m "Auto-update predictions + results" || echo "No changes"
           git pull --rebase origin main
           git push
