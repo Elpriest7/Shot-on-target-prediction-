@@ -1,0 +1,39 @@
+name: Daily SOT Predictions
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests google-generativeai
+
+      - name: Run predictions script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+        run: python fetch_predictions.py
+
+      - name: Commit and push data.json
+        run: |
+          git config user.name "SOTIQ Bot"
+          git config user.email "bot@sotiq.com"
+          git add data.json
+          git commit -m "Auto-update predictions $(date -u '+%Y-%m-%d %H:%M')" || echo "No changes"
+          git push
