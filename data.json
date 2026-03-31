@@ -1,11 +1,8 @@
 {
-  "updated": "2026-03-31T07:48:36.849255Z",
+  "updated": "2026-03-31T08:10:22.209833Z",
   "aiInsight": "No matches today for analysis.",
-  "stats": {
-    "safe": 0,
-    "positiveEV": 0,
-    "value": 0,
-    "avoid": 0
-  },
+  "resultsSummary": "",
+  "hitRate": null,
+  "historySummary": {},
   "matches": []
 }
