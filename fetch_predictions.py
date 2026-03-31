@@ -9,7 +9,7 @@ FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 ODDS_KEY     = os.environ.get("ODDS_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash-latest")
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 today     = datetime.utcnow()
 yesterday = today - timedelta(days=1)
