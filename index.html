@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOTIQ — Shots on Target Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #040608;
+  --card: #0d1318;
+  --card2: #111820;
+  --hover: #161f28;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.12);
+  --lime: #b3ff4e;
+  --cyan: #00e5ff;
+  --orange: #ff6b2b;
+  --red: #ff3b3b;
+  --yellow: #ffd60a;
+  --text: #f0f4f8;
+  --muted: #7a8fa0;
+  --dim: #3d5060;
+  --green: #22c55e;
+  --display: 'Barlow Condensed', sans-serif;
+  --body: 'Outfit', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:14px;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
+
+/* GLOW */
+body::before{content:'';position:fixed;top:-20%;left:-10%;width:60%;height:60%;background:radial-gradient(ellipse,rgba(179,255,78,0.04) 0%,transparent 65%);pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;bottom:-20%;right:-10%;width:50%;height:50%;background:radial-gradient(ellipse,rgba(0,229,255,0.03) 0%,transparent 65%);pointer-events:none;z-index:0}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:100;background:rgba(4,6,8,0.93);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 16px}
+.hdr{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:54px;gap:12px}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+.logo-icon{width:32px;height:32px;background:var(--lime);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.logo-text{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:2px;color:var(--text)}
+.logo-text span{color:var(--lime)}
+.live-badge{display:flex;align-items:center;gap:5px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--red)}
+.live-dot{width:6px;height:6px;background:var(--red);border-radius:50%;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
+.last-update{font-size:10px;color:var(--dim);font-family:var(--mono)}
+
+/* WRAP */
+.wrap{max-width:1200px;margin:0 auto;padding:20px 16px;position:relative;z-index:1}
+
+/* STATS BAR */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 14px}
+.stat-label{font-size:10px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.stat-val{font-family:var(--display);font-size:26px;font-weight:800;line-height:1}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.stat.s-lime .stat-val{color:var(--lime)}
+.stat.s-green .stat-val{color:var(--green)}
+.stat.s-yellow .stat-val{color:var(--yellow)}
+.stat.s-red .stat-val{color:var(--red)}
+
+/* STATUS BAR */
+.status-bar{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:20px;font-size:11px;flex-wrap:wrap;gap:8px}
+.status-left{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.spinner{width:11px;height:11px;border:2px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-right{display:flex;align-items:center;gap:10px}
+.countdown{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.refresh-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;transition:.2s}
+.refresh-btn:hover{border-color:var(--lime);color:var(--lime)}
+
+/* DATE TABS */
+.section-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.section-title{font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.title-dot{width:6px;height:6px;background:var(--lime);border-radius:50%}
+.date-tabs{display:flex;gap:3px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:3px}
+.dtab{background:transparent;border:none;color:var(--muted);font-family:var(--body);font-size:12px;font-weight:600;padding:5px 14px;border-radius:7px;cursor:pointer;transition:.2s;white-space:nowrap}
+.dtab:hover{color:var(--text)}
+.dtab.active{background:var(--lime);color:#000}
+
+/* FILTERS */
+.filters{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.filter-label{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.fchip{background:var(--card2);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;padding:4px 11px;border-radius:20px;cursor:pointer;transition:.2s;white-space:nowrap}
+.fchip:hover{border-color:var(--border2);color:var(--text)}
+.fchip.active{background:rgba(179,255,78,0.12);border-color:rgba(179,255,78,0.4);color:var(--lime)}
+.fchip.f-red.active{background:rgba(255,59,59,0.1);border-color:rgba(255,59,59,0.3);color:var(--red)}
+.search-wrap{position:relative;margin-left:auto}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:12px;pointer-events:none}
+.search{background:var(--card);border:1px solid var(--border);color:var(--text);font-family:var(--body);font-size:12px;padding:6px 12px 6px 30px;border-radius:20px;outline:none;width:170px;transition:.2s}
+.search:focus{border-color:var(--lime)}
+
+/* LAYOUT */
+.grid{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
+
+/* LEAGUE HEADER */
+.league-hdr{display:flex;align-items:center;gap:8px;padding:7px 12px;margin-bottom:8px;background:var(--card2);border-radius:6px;border-left:3px solid var(--cyan)}
+.league-flag{font-size:15px}
+.league-name{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.league-count{margin-left:auto;background:rgba(0,229,255,0.1);color:var(--cyan);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px}
+
+/* MATCH CARD */
+.match-group{margin-bottom:24px}
+.match-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;transition:.2s}
+.match-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.match-card.expanded{border-color:rgba(179,255,78,0.18)}
+.match-hdr{display:flex;align-items:center;padding:12px 14px;gap:10px;cursor:pointer;user-select:none}
+.match-time{font-family:var(--mono);font-size:12px;color:var(--cyan);min-width:42px;flex-shrink:0}
+.match-time.live-t{color:var(--red);animation:pulse 1.5s infinite}
+.match-teams{flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.team-name{font-size:13px;font-weight:600;color:var(--text)}
+.vs{font-size:10px;color:var(--dim);font-weight:700;flex-shrink:0}
+.match-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.pick-badge{background:rgba(179,255,78,0.1);border:1px solid rgba(179,255,78,0.2);color:var(--lime);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+.variance-badge{font-size:10px;color:var(--yellow);font-weight:700}
+.expand-icon{color:var(--dim);font-size:10px;transition:transform .3s}
+.match-card.expanded .expand-icon{transform:rotate(180deg)}
+.match-body{display:none;border-top:1px solid var(--border)}
+.match-card.expanded .match-body{display:block}
+
+/* TEAM STRENGTH */
+.strength-row{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;padding:10px 14px;background:var(--card2);font-size:11px}
+.str-group{display:flex;flex-direction:column;gap:3px}
+.str-group.right{align-items:flex-end}
+.str-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.str-row{display:flex;align-items:center;gap:5px}
+.str-bar{width:55px;height:3px;background:var(--hover);border-radius:2px;overflow:hidden}
+.str-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--lime))}
+.str-val{font-family:var(--mono);font-size:11px;color:var(--text)}
+.str-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.str-mid-icon{font-size:13px}
+.str-mid-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+
+/* PLAYERS */
+.players-wrap{padding:0 14px 14px}
+.p-thead{display:grid;grid-template-columns:160px 55px 55px 70px 75px 85px 85px;gap:3px;padding:7px 8px;margin-bottom:2px}
+.th{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.th.c{text-align:center}
+.th.r{text-align:right}
+.p-row{display:grid;grid-template-columns:160px 55px 55px 70px 75px 85px 85px;gap:3px;padding:9px 8px;border-radius:7px;align-items:center;margin-bottom:1px;position:relative;transition:background .15s;cursor:default}
+.p-row:hover{background:var(--hover)}
+.p-row.safe-row::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--lime);border-radius:1px}
+.p-row.avoid-row::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--red);border-radius:1px}
+
+/* PLAYER INFO */
+.p-info{}
+.p-name{font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.role-badge{font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:var(--hover);color:var(--muted)}
+.role-badge.ST{background:rgba(255,107,43,0.15);color:var(--orange)}
+.role-badge.LW,.role-badge.RW{background:rgba(0,229,255,0.1);color:var(--cyan)}
+.role-badge.CAM{background:rgba(179,255,78,0.1);color:var(--lime)}
+.p-sub{font-size:9px;color:var(--dim);display:flex;align-items:center;gap:3px;margin-top:1px}
+.sdot{width:4px;height:4px;border-radius:50%}
+.sdot.confirmed{background:var(--green)}
+.sdot.doubt{background:var(--yellow)}
+.value-tag{font-size:8px;font-weight:700;background:rgba(179,255,78,0.15);color:var(--lime);padding:1px 4px;border-radius:3px}
+
+/* TD */
+.td{font-size:11px;color:var(--muted)}
+.td.c{text-align:center}
+.td.r{text-align:right}
+.xsot{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);text-align:center}
+
+/* FORM */
+.form-dots{display:flex;gap:2px;align-items:center}
+.fd{width:7px;height:7px;border-radius:50%}
+.fd.hit{background:var(--green)}
+.fd.miss{background:var(--hover);border:1px solid var(--border2)}
+
+/* PROB */
+.prob-wrap{display:flex;align-items:center;gap:5px}
+.prob-bar{width:35px;height:3px;background:var(--hover);border-radius:2px;overflow:hidden}
+.prob-fill{height:100%;border-radius:2px}
+.prob-fill.hi{background:var(--green)}
+.prob-fill.mid{background:var(--yellow)}
+.prob-fill.lo{background:var(--red)}
+.prob-pct{font-family:var(--mono);font-size:11px;font-weight:500;min-width:30px}
+.prob-pct.hi{color:var(--green)}
+.prob-pct.mid{color:var(--yellow)}
+.prob-pct.lo{color:var(--red)}
+
+/* VERDICT */
+.verdict{font-size:10px;font-weight:800;letter-spacing:1px;padding:3px 8px;border-radius:4px;text-align:center;display:inline-block;font-family:var(--display)}
+.verdict.SAFE{background:rgba(179,255,78,0.12);color:var(--lime);border:1px solid rgba(179,255,78,0.25)}
+.verdict.RISKY{background:rgba(255,214,10,0.1);color:var(--yellow);border:1px solid rgba(255,214,10,0.25)}
+.verdict.AVOID{background:rgba(255,59,59,0.1);color:var(--red);border:1px solid rgba(255,59,59,0.25)}
+
+/* ODDS */
+.odds-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.odds-val{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text)}
+.ev-val{font-size:9px;font-family:var(--mono)}
+.ev-val.pos{color:var(--green)}
+.ev-val.neg{color:var(--red)}
+
+/* SIDEBAR */
+.sidebar{display:flex;flex-direction:column;gap:14px}
+.sb-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.sb-head{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sb-title{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.sb-body{padding:13px 14px}
+
+/* BEST PICKS */
+.bp-item{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)}
+.bp-item:last-child{border-bottom:none;padding-bottom:0}
+.bp-rank{font-family:var(--display);font-size:17px;font-weight:900;color:var(--dim);min-width:20px}
+.bp-rank.gold{color:var(--yellow)}
+.bp-info{flex:1}
+.bp-name{font-size:12px;font-weight:600;color:var(--text);margin-bottom:1px;display:flex;align-items:center;gap:4px}
+.bp-match{font-size:10px;color:var(--dim)}
+.bp-right{text-align:right;flex-shrink:0}
+.bp-prob{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--green)}
+.bp-ev{font-size:9px;font-family:var(--mono);color:var(--dim)}
+
+/* ACCA */
+.acca-card{background:var(--card2);border:1px solid rgba(179,255,78,0.12);border-radius:7px;padding:11px;margin-bottom:9px}
+.acca-card:last-child{margin-bottom:0}
+.acca-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.acca-title{font-size:10px;font-weight:700;color:var(--lime);text-transform:uppercase;letter-spacing:.5px}
+.acca-odds{font-family:var(--mono);font-size:13px;color:var(--text)}
+.acca-picks{display:flex;flex-direction:column;gap:4px}
+.acca-pick{display:flex;align-items:center;justify-content:space-between;font-size:10px;gap:5px}
+.acca-pick-name{color:var(--muted);flex:1}
+.acca-pick-prob{font-family:var(--mono);font-size:10px;color:var(--green)}
+.acca-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:7px;border-top:1px solid var(--border);font-size:10px}
+.acca-bottom-lbl{color:var(--dim)}
+.acca-bottom-val{font-family:var(--mono);color:var(--lime);font-weight:500}
+
+/* HIT RATE */
+.hr-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}
+.hr-stat{background:var(--card2);border-radius:7px;padding:9px;text-align:center}
+.hr-val{font-family:var(--display);font-size:22px;font-weight:800;line-height:1;margin-bottom:2px}
+.hr-val.good{color:var(--green)}
+.hr-val.ok{color:var(--yellow)}
+.hr-lbl{font-size:9px;color:var(--dim)}
+
+/* RISK */
+.risk-item{display:flex;align-items:flex-start;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)}
+.risk-item:last-child{border-bottom:none}
+.risk-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.risk-name{font-size:11px;font-weight:600;color:var(--text);margin-bottom:1px}
+.risk-reason{font-size:10px;color:var(--dim)}
+
+/* GEMINI INSIGHT */
+.gemini-box{background:rgba(179,255,78,0.04);border:1px solid rgba(179,255,78,0.15);border-radius:8px;padding:12px;margin-top:10px}
+.gemini-label{font-size:10px;font-weight:700;color:var(--lime);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.gemini-text{font-size:11px;color:var(--muted);line-height:1.6}
+
+/* EMPTY */
+.empty{text-align:center;padding:50px 20px;color:var(--dim)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+
+/* LOADING */
+.loading{text-align:center;padding:60px 20px;color:var(--muted)}
+.loading-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px}
+
+/* MOBILE */
+@media(max-width:1000px){.grid{grid-template-columns:1fr}.sidebar{display:grid;grid-template-columns:1fr 1fr}}
+@media(max-width:700px){
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  .sidebar{grid-template-columns:1fr}
+  .p-thead,.p-row{grid-template-columns:140px 48px 55px 65px 70px}
+  .p-thead>*:nth-child(6),.p-thead>*:nth-child(7),.p-row>*:nth-child(6),.p-row>*:nth-child(7){display:none}
+}
+@media(max-width:480px){
+  .p-thead,.p-row{grid-template-columns:1fr 45px 55px 60px}
+  .p-thead>*:nth-child(5),.p-row>*:nth-child(5){display:none}
+  .filters{gap:5px}
+}
+
+/* ANIM */
+.fade{animation:fadeIn .4s ease-out forwards;opacity:0}
+@keyframes fadeIn{to{opacity:1}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <a href="#" class="logo">
+      <div class="logo-icon">⚽</div>
+      <div class="logo-text">SOT<span>IQ</span></div>
+    </a>
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    <div class="last-update" id="lastUpdate">Loading...</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- STATS -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat s-lime"><div class="stat-label">Safe Picks</div><div class="stat-val" id="sSafe">—</div><div class="stat-sub">≥75% prob</div></div>
+    <div class="stat s-green"><div class="stat-label">Positive EV</div><div class="stat-val" id="sEV">—</div><div class="stat-sub">Model edge</div></div>
+    <div class="stat s-yellow"><div class="stat-label">Value Bets</div><div class="stat-val" id="sValue">—</div><div class="stat-sub">Odds edge</div></div>
+    <div class="stat s-red"><div class="stat-label">Avoid</div><div class="stat-val" id="sAvoid">—</div><div class="stat-sub">High variance</div></div>
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-bar">
+    <div class="status-left"><div class="spinner"></div><span>Auto-updating via GitHub Actions</span></div>
+    <div class="status-right">
+      <span class="countdown" id="countdown">—</span>
+      <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- GRID -->
+  <div class="grid">
+    <div>
+      <!-- DATE TABS -->
+      <div class="section-top">
+        <div class="section-title"><div class="title-dot"></div>Match Predictions</div>
+        <div class="date-tabs">
+          <button class="dtab" id="tab-yesterday" onclick="setDay('yesterday')">Yesterday</button>
+          <button class="dtab active" id="tab-today" onclick="setDay('today')">Today</button>
+          <button class="dtab" id="tab-tomorrow" onclick="setDay('tomorrow')">Tomorrow</button>
+        </div>
+      </div>
+
+      <!-- FILTERS -->
+      <div class="filters">
+        <span class="filter-label">Filter:</span>
+        <button class="fchip active" data-f="all" onclick="setFilter('all')">All</button>
+        <button class="fchip" data-f="safe" onclick="setFilter('safe')">🟢 Safe</button>
+        <button class="fchip" data-f="value" onclick="setFilter('value')">⚡ Value</button>
+        <button class="fchip" data-f="posev" onclick="setFilter('posev')">+EV</button>
+        <button class="fchip f-red" data-f="avoid" onclick="setFilter('avoid')">🔴 Avoid</button>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search" id="searchBox" placeholder="Search..." oninput="renderMatches()">
+        </div>
+      </div>
+
+      <div id="matchesContainer"><div class="loading"><div class="loading-spinner"></div>Loading predictions...</div></div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sb-card">
+        <div class="sb-head"><div class="sb-title">🏆 Best Picks</div></div>
+        <div class="sb-body" id="bestPicks">—</div>
+      </div>
+      <div class="sb-card">
+        <div class="sb-head"><div class="sb-title">🎯 Safe Accas</div></div>
+        <div class="sb-body" id="accaList">—</div>
+      </div>
+      <div class="sb-card">
+        <div class="sb-head"><div class="sb-title">⚠️ Risk Flags</div></div>
+        <div class="sb-body" id="riskFlags">—</div>
+      </div>
+      <div class="sb-card">
+        <div class="sb-head"><div class="sb-title">🤖 AI Insight</div></div>
+        <div class="sb-body" id="aiInsight"><div style="color:var(--dim);font-size:11px">Waiting for Gemini analysis...</div></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let DATA = null;
+let currentDay = 'today';
+let currentFilter = 'all';
+let countdown = 300;
+
+const LEAGUES = {
+  pl:         {name:'Premier League',   flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', color:'#00e5ff'},
+  laliga:     {name:'La Liga',          flag:'🇪🇸', color:'#ff6b2b'},
+  ucl:        {name:'Champions League', flag:'⭐',  color:'#ffd60a'},
+  bundesliga: {name:'Bundesliga',       flag:'🇩🇪', color:'#b3ff4e'},
+  seriea:     {name:'Serie A',          flag:'🇮🇹', color:'#22c55e'},
+  ligue1:     {name:'Ligue 1',          flag:'🇫🇷', color:'#9b59b6'},
+};
+
+// ── LOAD DATA ──
+async function loadData() {
+  try {
+    const r = await fetch('data.json?t=' + Date.now());
+    if (!r.ok) throw new Error('no data');
+    DATA = await r.json();
+    renderAll();
+    document.getElementById('lastUpdate').textContent = 'Updated ' + new Date(DATA.updated || Date.now()).toLocaleTimeString();
+  } catch(e) {
+    // Use fallback demo data if data.json not ready yet
+    DATA = getFallback();
+    renderAll();
+    document.getElementById('lastUpdate').textContent = 'Demo data — GitHub Actions not yet run';
+  }
+}
+
+// ── RENDER ALL ──
+function renderAll() {
+  renderMatches();
+  renderBestPicks();
+  renderAccas();
+  renderRiskFlags();
+  renderAIInsight();
+  updateStats();
+}
+
+// ── RENDER MATCHES ──
+function renderMatches() {
+  const container = document.getElementById('matchesContainer');
+  if (!DATA) return;
+
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  let matches = (DATA.matches || []).filter(m => m.day === currentDay);
+
+  if (q) {
+    matches = matches.filter(m =>
+      m.homeTeam.toLowerCase().includes(q) ||
+      m.awayTeam.toLowerCase().includes(q) ||
+      (m.players||[]).some(p => p.name.toLowerCase().includes(q))
+    );
+  }
+
+  if (currentFilter !== 'all') {
+    matches = matches.map(m => {
+      let ps = [...(m.players||[])];
+      if (currentFilter === 'safe')  ps = ps.filter(p => p.verdict === 'SAFE');
+      if (currentFilter === 'avoid') ps = ps.filter(p => p.verdict === 'AVOID');
+      if (currentFilter === 'value') ps = ps.filter(p => p.isValue);
+      if (currentFilter === 'posev') ps = ps.filter(p => p.ev > 0);
+      return {...m, players: ps};
+    }).filter(m => (m.players||[]).length > 0);
+  }
+
+  if (!matches.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">⚽</div>No matches for this filter</div>';
+    return;
+  }
+
+  // Group by league
+  const byLeague = {};
+  matches.forEach(m => { if (!byLeague[m.league]) byLeague[m.league]=[]; byLeague[m.league].push(m); });
+
+  let html = '';
+  for (const [lid, ms] of Object.entries(byLeague)) {
+    const lg = LEAGUES[lid] || {name:lid, flag:'🌍', color:'#fff'};
+    const safe = ms.reduce((a,m) => a + (m.players||[]).filter(p=>p.verdict==='SAFE').length, 0);
+    html += `<div class="match-group fade">
+      <div class="league-hdr" style="border-left-color:${lg.color}">
+        <span class="league-flag">${lg.flag}</span>
+        <span class="league-name">${lg.name}</span>
+        ${safe > 0 ? `<span class="league-count">${safe} safe</span>` : ''}
+      </div>
+      ${ms.map(renderMatchCard).join('')}
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderMatchCard(m) {
+  const safe = (m.players||[]).filter(p=>p.verdict==='SAFE').length;
+  const hAtt = Math.round((m.homeAttack||0.7)*100);
+  const aAtt = Math.round((m.awayAttack||0.7)*100);
+  const hDef = Math.round((m.homeDefense||0.7)*100);
+  const aDef = Math.round((m.awayDefense||0.7)*100);
+
+  return `
+  <div class="match-card expanded" id="mc-${m.id}">
+    <div class="match-hdr" onclick="toggleMatch(${m.id})">
+      <span class="match-time ${m.isLive?'live-t':''}">${m.isLive?'🔴':m.kickoff}</span>
+      <div class="match-teams">
+        <span class="team-name">${m.homeTeam}</span>
+        <span class="vs">vs</span>
+        <span class="team-name">${m.awayTeam}</span>
+      </div>
+      <div class="match-right">
+        ${m.isHighVariance ? '<span class="variance-badge">⚠ DERBY</span>' : ''}
+        ${safe > 0 ? `<span class="pick-badge">${safe} SAFE</span>` : ''}
+        <span class="expand-icon">▼</span>
+      </div>
+    </div>
+    <div class="match-body">
+      <div class="strength-row">
+        <div class="str-group">
+          <span class="str-lbl">Attack</span>
+          <div class="str-row"><div class="str-bar"><div class="str-fill" style="width:${hAtt}%"></div></div><span class="str-val">${hAtt}</span></div>
+          <span class="str-lbl">Defense</span>
+          <div class="str-row"><div class="str-bar"><div class="str-fill" style="width:${hDef}%"></div></div><span class="str-val">${hDef}</span></div>
+        </div>
+        <div class="str-mid"><span class="str-mid-icon">${m.isHighVariance?'⚠️':'⚔️'}</span><span class="str-mid-lbl">${m.isHighVariance?'High Var':'Match'}</span></div>
+        <div class="str-group right">
+          <span class="str-lbl">Attack</span>
+          <div class="str-row" style="flex-direction:row-reverse"><div class="str-bar"><div class="str-fill" style="width:${aAtt}%"></div></div><span class="str-val">${aAtt}</span></div>
+          <span class="str-lbl">Defense</span>
+          <div class="str-row" style="flex-direction:row-reverse"><div class="str-bar"><div class="str-fill" style="width:${aDef}%"></div></div><span class="str-val">${aDef}</span></div>
+        </div>
+      </div>
+      <div class="players-wrap">${renderPlayers(m.players||[], m.day==='yesterday')}</div>
+    </div>
+  </div>`;
+}
+
+function renderPlayers(players, isResult) {
+  if (!players.length) return '<div style="color:var(--dim);font-size:11px;padding:8px">No player data available</div>';
+  const head = `<div class="p-thead">
+    <div class="th">Player</div>
+    <div class="th c">xSOT</div>
+    <div class="th c">Line</div>
+    <div class="th">Form</div>
+    <div class="th">Prob</div>
+    <div class="th r">Odds/EV</div>
+    <div class="th r">Verdict</div>
+  </div>`;
+
+  const rows = players.map(p => {
+    const pc = p.prob>=.75?'hi':p.prob>=.55?'mid':'lo';
+    const form = (p.form||[0,0,0,0,0,0]).map(f=>`<div class="fd ${f?'hit':'miss'}"></div>`).join('');
+    const evCls = p.ev>0?'pos':'neg';
+    const isSafe = p.verdict==='SAFE';
+    const isAvoid = p.verdict==='AVOID';
+
+    let resultCol = '';
+    if (isResult && p.actualSOT !== undefined) {
+      resultCol = `<div style="font-family:var(--mono);font-size:11px;text-align:right;${p.hit?'color:var(--green)':'color:var(--red)'}">${p.actualSOT} SOT ${p.hit?'✓':'✗'}</div>`;
+    } else {
+      resultCol = `<div class="verdict ${p.verdict}" style="float:right">${p.verdict}</div>`;
+    }
+
+    return `<div class="p-row ${isSafe?'safe-row':''} ${isAvoid?'avoid-row':''}">
+      <div class="p-info">
+        <div class="p-name">${p.name}<span class="role-badge ${p.role||''}">${p.role||'?'}</span></div>
+        <div class="p-sub"><div class="sdot ${p.status||'confirmed'}"></div>${p.status==='doubt'?'Doubt':'Starting'} · ${p.minutes||90}m${p.isValue?' · <span class="value-tag">VALUE</span>':''}</div>
+      </div>
+      <div class="xsot">${(p.xsot||0).toFixed(2)}</div>
+      <div class="td c" style="font-family:var(--mono)">${p.line||0.5}</div>
+      <div class="td"><div class="form-dots">${form}</div></div>
+      <div class="td">
+        <div class="prob-wrap">
+          <div class="prob-bar"><div class="prob-fill ${pc}" style="width:${Math.round((p.prob||0)*100)}%"></div></div>
+          <span class="prob-pct ${pc}">${Math.round((p.prob||0)*100)}%</span>
+        </div>
+      </div>
+      <div class="td r">
+        <div class="odds-wrap">
+          <span class="odds-val">${(p.oddsCurrent||1.8).toFixed(2)}x</span>
+          <span class="ev-val ${evCls}">${p.ev>0?'+':''}${((p.ev||0)*100).toFixed(1)}% EV</span>
+        </div>
+      </div>
+      <div class="td r">${resultCol}</div>
+    </div>`;
+  }).join('');
+
+  return head + rows;
+}
+
+// ── SIDEBAR ──
+function renderBestPicks() {
+  const matches = (DATA?.matches||[]).filter(m=>m.day==='today');
+  let all = [];
+  matches.forEach(m => (m.players||[]).forEach(p => {
+    if (p.verdict!=='AVOID') all.push({...p, matchName:`${m.homeTeam} vs ${m.awayTeam}`});
+  }));
+  all.sort((a,b) => (b.prob+b.ev)-(a.prob+a.ev));
+  const top = all.slice(0,5);
+  if (!top.length) { document.getElementById('bestPicks').innerHTML='<div style="color:var(--dim);font-size:11px">No picks today</div>'; return; }
+  document.getElementById('bestPicks').innerHTML = top.map((p,i)=>`
+    <div class="bp-item">
+      <div class="bp-rank ${i===0?'gold':''}">${i+1}</div>
+      <div class="bp-info">
+        <div class="bp-name">${p.name}<span class="role-badge ${p.role}">${p.role}</span></div>
+        <div class="bp-match">${p.matchName}</div>
+        <div class="bp-match">Line: ${p.line} · ${p.oddsCurrent?.toFixed(2)}x</div>
+      </div>
+      <div class="bp-right">
+        <div class="bp-prob">${Math.round(p.prob*100)}%</div>
+        <div class="bp-ev" style="${p.ev>0?'color:var(--green)':'color:var(--red)'}">${p.ev>0?'+':''}${(p.ev*100).toFixed(1)}%EV</div>
+        <div class="verdict ${p.verdict}" style="font-size:8px;padding:2px 6px;margin-top:2px">${p.verdict}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderAccas() {
+  const matches = (DATA?.matches||[]).filter(m=>m.day==='today');
+  let safe = [];
+  matches.forEach(m => (m.players||[]).forEach(p => {
+    if (p.verdict==='SAFE'&&p.ev>0) safe.push({...p,matchId:m.id,matchName:`${m.homeTeam} vs ${m.awayTeam}`});
+  }));
+  safe.sort((a,b)=>b.prob-a.prob);
+
+  function buildAcca(n) {
+    let picks=[]; let used=new Set();
+    for (const p of safe) { if (!used.has(p.matchId)&&picks.length<n){picks.push(p);used.add(p.matchId);} }
+    return picks;
+  }
+
+  const accas = [
+    {label:'3-Fold Acca', picks:buildAcca(3)},
+    {label:'5-Fold Acca', picks:buildAcca(5)},
+  ].filter(a=>a.picks.length>=2);
+
+  if (!accas.length) { document.getElementById('accaList').innerHTML='<div style="color:var(--dim);font-size:11px">Not enough safe picks</div>'; return; }
+
+  document.getElementById('accaList').innerHTML = accas.map(a=>{
+    const cp = a.picks.reduce((acc,p)=>acc*p.prob,1);
+    const co = a.picks.reduce((acc,p)=>acc*p.oddsCurrent,1);
+    return `<div class="acca-card">
+      <div class="acca-top"><span class="acca-title">🎯 ${a.label}</span><span class="acca-odds">${co.toFixed(2)}x</span></div>
+      <div class="acca-picks">${a.picks.map(p=>`<div class="acca-pick"><span class="acca-pick-name">${p.name} (${p.line}+)</span><span class="acca-pick-prob">${Math.round(p.prob*100)}%</span></div>`).join('')}</div>
+      <div class="acca-bottom"><span class="acca-bottom-lbl">Combined prob</span><span class="acca-bottom-val">${Math.round(cp*100)}%</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRiskFlags() {
+  const hv = (DATA?.matches||[]).filter(m=>m.day==='today'&&m.isHighVariance);
+  if (!hv.length) { document.getElementById('riskFlags').innerHTML='<div style="color:var(--dim);font-size:11px">No major risk flags today ✅</div>'; return; }
+  document.getElementById('riskFlags').innerHTML = hv.map(m=>`
+    <div class="risk-item">
+      <span class="risk-icon">⚠️</span>
+      <div><div class="risk-name">${m.homeTeam} vs ${m.awayTeam}</div><div class="risk-reason">High-variance · Derby/Cup · Avoid all picks</div></div>
+    </div>`).join('');
+}
+
+function renderAIInsight() {
+  const insight = DATA?.aiInsight || '';
+  if (!insight) return;
+  document.getElementById('aiInsight').innerHTML = `
+    <div class="gemini-box">
+      <div class="gemini-label">🤖 Gemini Analysis</div>
+      <div class="gemini-text">${insight}</div>
+    </div>`;
+}
+
+function updateStats() {
+  const matches = (DATA?.matches||[]).filter(m=>m.day==='today');
+  let all=[];
+  matches.forEach(m=>(m.players||[]).forEach(p=>all.push(p)));
+  document.getElementById('sSafe').textContent  = all.filter(p=>p.verdict==='SAFE').length;
+  document.getElementById('sEV').textContent    = all.filter(p=>p.ev>0).length;
+  document.getElementById('sValue').textContent = all.filter(p=>p.isValue).length;
+  document.getElementById('sAvoid').textContent = all.filter(p=>p.verdict==='AVOID').length;
+}
+
+// ── INTERACTIONS ──
+function toggleMatch(id) { document.getElementById(`mc-${id}`)?.classList.toggle('expanded'); }
+function setDay(d) {
+  currentDay=d;
+  document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(`tab-${d}`).classList.add('active');
+  renderMatches();
+}
+function setFilter(f) {
+  currentFilter=f;
+  document.querySelectorAll('.fchip').forEach(c=>c.classList.remove('active'));
+  document.querySelector(`[data-f="${f}"]`).classList.add('active');
+  renderMatches();
+}
+
+// ── COUNTDOWN ──
+setInterval(()=>{
+  countdown--;
+  if(countdown<=0){ loadData(); countdown=300; }
+  const m=String(Math.floor(countdown/60)).padStart(2,'0');
+  const s=String(countdown%60).padStart(2,'0');
+  document.getElementById('countdown').textContent=`Next refresh: ${m}:${s}`;
+},1000);
+
+// ── FALLBACK DEMO DATA ──
+function getFallback() {
+  return {
+    updated: Date.now(),
+    aiInsight: "Demo mode: GitHub Actions not yet configured. Once set up, Gemini AI will provide daily match analysis and player SOT predictions here automatically.",
+    matches: [
+      {
+        id:1, league:'pl', day:'today',
+        homeTeam:'Arsenal', awayTeam:'Man City',
+        kickoff:'15:00', homeAttack:0.88, awayAttack:0.91,
+        homeDefense:0.72, awayDefense:0.78,
+        isLive:false, isHighVariance:false,
+        players:[
+          {name:'B. Saka',role:'RW',minutes:90,line:0.5,xsot:1.42,prob:0.76,conf:8,oddsCurrent:1.65,ev:0.054,isValue:true,verdict:'SAFE',form:[1,1,0,1,1,0],status:'confirmed'},
+          {name:'K. Havertz',role:'ST',minutes:85,line:0.5,xsot:1.18,prob:0.69,conf:7,oddsCurrent:1.72,ev:0.019,isValue:false,verdict:'RISKY',form:[1,0,1,1,0,1],status:'confirmed'},
+          {name:'E. Haaland',role:'ST',minutes:90,line:1.5,xsot:1.85,prob:0.81,conf:9,oddsCurrent:1.90,ev:0.139,isValue:true,verdict:'SAFE',form:[1,1,1,1,0,1],status:'confirmed'},
+          {name:'P. Foden',role:'CAM',minutes:88,line:0.5,xsot:1.05,prob:0.64,conf:6,oddsCurrent:1.80,ev:0.022,isValue:false,verdict:'RISKY',form:[1,0,1,0,1,0],status:'confirmed'},
+        ]
+      },
+      {
+        id:2, league:'ucl', day:'today',
+        homeTeam:'Real Madrid', awayTeam:'PSG',
+        kickoff:'20:00', homeAttack:0.92, awayAttack:0.89,
+        homeDefense:0.80, awayDefense:0.75,
+        isLive:false, isHighVariance:true,
+        players:[
+          {name:'Vinicius Jr',role:'LW',minutes:90,line:1.5,xsot:1.62,prob:0.71,conf:7,oddsCurrent:2.10,ev:0.049,isValue:false,verdict:'AVOID',form:[1,1,0,1,1,0],status:'confirmed'},
+          {name:'K. Mbappé',role:'ST',minutes:90,line:1.5,xsot:1.78,prob:0.78,conf:8,oddsCurrent:1.95,ev:0.121,isValue:true,verdict:'AVOID',form:[1,1,1,1,0,1],status:'confirmed'},
+        ]
+      },
+      {
+        id:3, league:'pl', day:'yesterday',
+        homeTeam:'Liverpool', awayTeam:'Chelsea',
+        kickoff:'17:30', homeAttack:0.85, awayAttack:0.76,
+        homeDefense:0.70, awayDefense:0.65,
+        isLive:false, isHighVariance:false,
+        players:[
+          {name:'M. Salah',role:'RW',minutes:90,line:1.5,xsot:1.90,prob:0.82,conf:9,oddsCurrent:1.85,ev:0.117,isValue:true,verdict:'SAFE',form:[1,1,1,0,1,1],status:'confirmed',actualSOT:2,hit:true},
+          {name:'L. Díaz',role:'LW',minutes:82,line:0.5,xsot:1.22,prob:0.71,conf:7,oddsCurrent:1.70,ev:0.007,isValue:false,verdict:'RISKY',form:[1,0,1,1,0,0],status:'confirmed',actualSOT:0,hit:false},
+        ]
+      },
+      {
+        id:4, league:'bundesliga', day:'tomorrow',
+        homeTeam:'Bayern Munich', awayTeam:'Dortmund',
+        kickoff:'18:30', homeAttack:0.93, awayAttack:0.80,
+        homeDefense:0.75, awayDefense:0.68,
+        isLive:false, isHighVariance:true,
+        players:[
+          {name:'H. Kane',role:'ST',minutes:90,line:1.5,xsot:2.10,prob:0.85,conf:9,oddsCurrent:1.95,ev:0.158,isValue:true,verdict:'AVOID',form:[1,1,1,1,1,0],status:'confirmed'},
+          {name:'S. Gnabry',role:'RW',minutes:78,line:0.5,xsot:1.15,prob:0.67,conf:6,oddsCurrent:1.75,ev:0.023,isValue:false,verdict:'RISKY',form:[1,0,1,0,1,1],status:'confirmed'},
+        ]
+      },
+    ]
+  };
+}
+
+// ── INIT ──
+loadData();
+</script>
+</body>
+</html>
