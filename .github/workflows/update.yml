@@ -28,6 +28,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          THEODDS_API_KEY: ${{ secrets.THEODDS_API_KEY }}
         run: python fetch_predictions.py
 
       - name: Commit and push
