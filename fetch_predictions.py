@@ -4,9 +4,10 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 
 # ── KEYS ──
-GEMINI_KEY   = os.environ.get("GEMINI_API_KEY")
-FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
-ODDS_KEY     = os.environ.get("ODDS_API_KEY")
+GEMINI_KEY    = os.environ.get("GEMINI_API_KEY")
+FOOTBALL_KEY  = os.environ.get("FOOTBALL_API_KEY")
+ODDS_KEY      = os.environ.get("ODDS_API_KEY")
+THEODDS_KEY   = os.environ.get("THEODDS_API_KEY")  # Real player SOT lines
 
 genai.configure(api_key=GEMINI_KEY)
 # gemini-2.5-flash = current free tier model (250 req/day)
@@ -43,6 +44,17 @@ LEAGUES = {
           "fbref":"8",             "odds":"soccer_uefa_champs_league"},
     3:   {"key":"uel",        "name":"Europa League",    "flag":"🟠", "country":"Europe",  "tier":"B",
           "fbref":"19",            "odds":"soccer_uefa_europa_league"},
+}
+
+# ── THE ODDS API — PLAYER SOT MARKET KEYS ──
+THEODDS_LEAGUES = {
+    39:  "soccer_epl",
+    140: "soccer_spain_la_liga",
+    78:  "soccer_germany_bundesliga",
+    135: "soccer_italy_serie_a",
+    61:  "soccer_france_ligue_one",
+    2:   "soccer_uefa_champs_league",
+    3:   "soccer_uefa_europa_league",
 }
 
 ROLE_FACTORS = {
@@ -262,47 +274,199 @@ def is_banker(prob, conf, ev, avg_sot, form):
             and avg_sot>=1.2 and form_rate>=0.6)
 
 # ══════════════════════════════════════════
-# ODDS
+# ODDS — THE ODDS API (Real Player SOT Lines)
 # ══════════════════════════════════════════
 
-odds_api_cache = {}
+theodds_events_cache = {}   # sport_key -> list of events
+theodds_props_cache  = {}   # event_id  -> player SOT props
 
-def get_match_odds(odds_key, home, away):
-    if not ODDS_KEY or not odds_key: 
+def get_theodds_events(sport_key):
+    """Get all upcoming events for a sport from The Odds API"""
+    if sport_key in theodds_events_cache:
+        return theodds_events_cache[sport_key]
+    if not THEODDS_KEY:
+        return []
+    try:
+        r = requests.get(
+            f"https://api.the-odds-api.com/v4/sports/{sport_key}/events",
+            params={"apiKey": THEODDS_KEY},
+            timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            theodds_events_cache[sport_key] = data
+            remaining = r.headers.get("x-requests-remaining","?")
+            print(f"  TheOddsAPI events {sport_key}: {len(data)} events | Credits left: {remaining}")
+            return data
+        else:
+            print(f"  TheOddsAPI events error: {r.status_code}")
+            return []
+    except Exception as e:
+        print(f"  TheOddsAPI events err: {e}")
+        return []
+
+def get_player_sot_lines(sport_key, event_id, home_team, away_team):
+    """
+    Fetch real player_shots_on_target lines from The Odds API.
+    Returns dict: {player_name_lower: {line, over_odds, under_odds, bookmaker}}
+    """
+    cache_key = f"{sport_key}:{event_id}"
+    if cache_key in theodds_props_cache:
+        return theodds_props_cache[cache_key]
+
+    if not THEODDS_KEY or not event_id:
+        return {}
+
+    try:
+        r = requests.get(
+            f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds",
+            params={
+                "apiKey":    THEODDS_KEY,
+                "regions":   "uk,eu",
+                "markets":   "player_shots_on_target",
+                "oddsFormat":"decimal"
+            },
+            timeout=15)
+
+        remaining = r.headers.get("x-requests-remaining","?")
+        print(f"  SOT lines for {home_team} vs {away_team} | Credits left: {remaining}")
+
+        if r.status_code != 200:
+            print(f"  TheOddsAPI props error: {r.status_code} — {r.text[:100]}")
+            theodds_props_cache[cache_key] = {}
+            return {}
+
+        data = r.json()
+        props = {}
+
+        for bookmaker in data.get("bookmakers", []):
+            bk_name = bookmaker.get("title","")
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "player_shots_on_target":
+                    continue
+                for outcome in market.get("outcomes", []):
+                    pname  = outcome.get("description","").lower()
+                    side   = outcome.get("name","").lower()   # "Over" or "Under"
+                    price  = outcome.get("price", 0)
+                    point  = outcome.get("point", 0.5)
+                    if not pname: continue
+
+                    if pname not in props:
+                        props[pname] = {
+                            "line":       point,
+                            "over_odds":  None,
+                            "under_odds": None,
+                            "bookmaker":  bk_name,
+                            "found":      True
+                        }
+                    if "over" in side:
+                        props[pname]["over_odds"]  = price
+                        props[pname]["line"]        = point
+                    elif "under" in side:
+                        props[pname]["under_odds"] = price
+
+        theodds_props_cache[cache_key] = props
+        print(f"  Found SOT lines for {len(props)} players")
+        return props
+
+    except Exception as e:
+        print(f"  SOT lines err: {e}")
+        theodds_props_cache[cache_key] = {}
+        return {}
+
+def match_event_id(sport_key, home_team, away_team):
+    """Find The Odds API event ID for a given match"""
+    events = get_theodds_events(sport_key)
+    hl = home_team.lower()
+    al = away_team.lower()
+    for ev in events:
+        eh = ev.get("home_team","").lower()
+        ea = ev.get("away_team","").lower()
+        # Fuzzy match — check if any word from team name matches
+        h_match = any(w in eh for w in hl.split() if len(w)>3)
+        a_match = any(w in ea for w in al.split() if len(w)>3)
+        if h_match or a_match:
+            return ev.get("id","")
+    return ""
+
+def get_match_h2h_odds(sport_key, home, away):
+    """Get match H2H odds from The Odds API as fallback"""
+    if not THEODDS_KEY: 
         return {"home":1.9,"away":2.1,"draw":3.4,"found":False}
     try:
-        if odds_key not in odds_api_cache:
-            r = requests.get(
-                f"https://api.odds-api.io/v4/sports/{odds_key}/odds",
-                params={"apiKey":ODDS_KEY,"regions":"uk","markets":"h2h","oddsFormat":"decimal"},
-                timeout=15)
-            odds_api_cache[odds_key] = r.json() if r.status_code==200 else []
-        for ev in odds_api_cache.get(odds_key,[]):
+        events = get_theodds_events(sport_key)
+        hl = home.lower(); al = away.lower()
+        for ev in events:
             eh = ev.get("home_team","").lower()
             ea = ev.get("away_team","").lower()
-            if (any(w in eh for w in home.lower().split()[:2]) or
-                any(w in ea for w in away.lower().split()[:2])):
-                bk = ev.get("bookmakers",[])
-                if bk:
-                    outs = bk[0].get("markets",[{}])[0].get("outcomes",[])
-                    om = {o["name"].lower():o["price"] for o in outs}
-                    return {"home": list(om.values())[0] if om else 1.9,
-                            "away": list(om.values())[1] if len(om)>1 else 2.1,
-                            "draw": om.get("draw",3.4), "found":True}
+            if any(w in eh for w in hl.split() if len(w)>3) or any(w in ea for w in al.split() if len(w)>3):
+                # Fetch odds for this event
+                r = requests.get(
+                    f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{ev['id']}/odds",
+                    params={"apiKey":THEODDS_KEY,"regions":"uk","markets":"h2h","oddsFormat":"decimal"},
+                    timeout=15)
+                if r.status_code==200:
+                    bks = r.json().get("bookmakers",[])
+                    if bks:
+                        outs = bks[0].get("markets",[{}])[0].get("outcomes",[])
+                        om = {o["name"].lower():o["price"] for o in outs}
+                        vals = list(om.values())
+                        return {"home":vals[0] if vals else 1.9,
+                                "away":vals[1] if len(vals)>1 else 2.1,
+                                "draw":om.get("draw",3.4),"found":True}
         return {"home":1.9,"away":2.1,"draw":3.4,"found":False}
-    except Exception as e:
+    except:
         return {"home":1.9,"away":2.1,"draw":3.4,"found":False}
 
-def player_odds(prob, match_odds):
-    fair    = round(1/max(prob,0.01), 2)
-    margin  = 0.08
-    avg_mo  = (match_odds["home"]+match_odds["away"])/2
-    drift   = (prob-0.5)*0.3 - (0.05/avg_mo)
-    open_o  = max(1.15, min(round(fair*(1-margin*0.5),2), 5.0))
-    curr_o  = max(1.10, min(round(open_o-drift,2), 5.0))
-    moved   = "up" if curr_o<open_o else "down" if curr_o>open_o else "flat"
-    return {"open":open_o,"current":curr_o,"moved":moved,
-            "pctMove":abs(round((curr_o-open_o)/open_o*100,1))}
+def resolve_player_odds(player_name, sot_lines, prob, match_odds):
+    """
+    Try to get real SOT line odds for a player.
+    Falls back to estimated odds if not found.
+    """
+    nl = player_name.lower()
+    real_line = None
+
+    # Try to match player name in SOT lines
+    for key, val in sot_lines.items():
+        # Match if any part of name matches
+        name_parts = [p for p in nl.split() if len(p)>3]
+        if any(part in key for part in name_parts):
+            real_line = val
+            break
+
+    if real_line and real_line.get("over_odds"):
+        # Real bookmaker SOT line found!
+        open_o   = round(real_line["over_odds"] * 1.03, 2)  # estimate opening as 3% wider
+        curr_o   = real_line["over_odds"]
+        line     = real_line["line"]
+        moved    = "up" if curr_o < open_o else "flat"
+        pct_move = abs(round((curr_o - open_o) / open_o * 100, 1))
+        return {
+            "open":      open_o,
+            "current":   curr_o,
+            "line":      line,
+            "moved":     moved,
+            "pctMove":   pct_move,
+            "realOdds":  True,
+            "bookmaker": real_line.get("bookmaker","")
+        }
+    else:
+        # Fallback: estimate from match odds + probability
+        fair   = round(1/max(prob,0.01), 2)
+        margin = 0.08
+        avg_mo = (match_odds.get("home",1.9)+match_odds.get("away",2.1))/2
+        drift  = (prob-0.5)*0.3 - (0.05/avg_mo)
+        open_o = max(1.15, min(round(fair*(1-margin*0.5),2), 5.0))
+        curr_o = max(1.10, min(round(open_o-drift,2), 5.0))
+        moved  = "up" if curr_o<open_o else "down" if curr_o>open_o else "flat"
+        return {
+            "open":     open_o,
+            "current":  curr_o,
+            "line":     None,  # use model line
+            "moved":    moved,
+            "pctMove":  abs(round((curr_o-open_o)/open_o*100,1)),
+            "realOdds": False,
+            "bookmaker":""
+        }
 
 # ══════════════════════════════════════════
 # LINEUPS & INJURIES
@@ -496,8 +660,19 @@ def process_fixtures(fixtures, day_label, match_date_str):
         us_data    = get_understat_players(lg.get("understat","")) if tier=="A" else {}
         fbref_data = get_fbref_players(lg.get("fbref",""))         if tier=="B" else {}
 
-        # Real odds
-        match_odds = get_match_odds(lg.get("odds",""), home_name, away_name)
+        # ── Real odds from The Odds API ──
+        sport_key  = THEODDS_LEAGUES.get(lid,"")
+        event_id   = match_event_id(sport_key, home_name, away_name) if sport_key else ""
+        match_odds = get_match_h2h_odds(sport_key, home_name, away_name) if sport_key else {"home":1.9,"away":2.1,"draw":3.4,"found":False}
+
+        # ── Real player SOT lines ──
+        sot_lines = {}
+        if sport_key and event_id and day_label in ["today","tomorrow"]:
+            sot_lines = get_player_sot_lines(sport_key, event_id, home_name, away_name)
+            if sot_lines:
+                print(f"  ✅ Real SOT lines: {home_name} vs {away_name}")
+            else:
+                print(f"  ⚠️  No SOT lines found for {home_name} vs {away_name} — using estimates")
 
         # Lineups + injuries (today/tomorrow)
         lineups, lu_confirmed = {}, False
@@ -524,8 +699,13 @@ def process_fixtures(fixtures, day_label, match_date_str):
                 line    = 1.5 if p["avg_sot"]>=1.5 else 0.5
                 prob    = calc_prob(xsot, line)
                 conf    = calc_conf(prob,p["avg_sot"],p["avg_mins"],p["games"],tier)
-                p_odds  = player_odds(prob, match_odds)
+                # Resolve real or estimated player SOT odds
+                p_odds  = resolve_player_odds(p["name"], sot_lines, prob, match_odds)
                 curr_o  = p_odds["current"]
+                # If real SOT line found, update the betting line too
+                if p_odds["realOdds"] and p_odds["line"] is not None:
+                    line = p_odds["line"]
+                    prob = calc_prob(xsot, line)  # recalc with real line
                 ev      = calc_ev(prob, curr_o)
                 implied = round(1/curr_o, 3)
 
@@ -562,6 +742,8 @@ def process_fixtures(fixtures, day_label, match_date_str):
                     "oddsCurrent": curr_o,
                     "oddsMoved":   p_odds["moved"],
                     "oddsPctMove": p_odds["pctMove"],
+                    "realOdds":    p_odds["realOdds"],
+                    "bookmaker":   p_odds["bookmaker"],
                     "ev":      ev,
                     "isValue": (prob-implied)>0.05,
                     "verdict": verdict,
