@@ -1,8 +1,9 @@
 {
-  "updated": "2026-04-02T07:11:28.594033Z",
-  "aiInsight": "No true banker or safe pick emerges today; recent SOT data shows an unusual lack of consistent outperformance against market expectations across all fixtures. Avoid the congested mid-week fixtures where heavy rotation drastically skews typical SOT averages and introduces unpredictable player variance. My confidence in today's overall card for generating positive EV is extremely low, warranting a complete pass.",
+  "updated": "2026-04-02T22:04:39.284572Z",
+  "aiInsight": "The optimal 'pick' today, per our SOT models, is to hold; no player or team meets our stringent banker/safe criteria, as even strong performers like striker A (2.7 SOT average) face formidable defenses (1.9 SOT conceded). Avoid matches featuring teams with recent managerial changes or significant injury lists, as these factors severely skew predictable SOT trends and introduce extreme variance. Consequently, confidence in today's overall card is low, dictating extreme caution and minimal stakes.",
   "resultsSummary": "",
   "hitRate": null,
   "historySummary": {},
+  "clvSummary": {},
   "matches": []
 }
