@@ -572,6 +572,47 @@ header{
   padding:1px 5px;border-radius:2px;
   letter-spacing:.5px;
 }
+/* Bookmaker odds comparison */
+.bk-odds-row{
+  display:flex;align-items:flex-start;
+  gap:6px;margin-top:5px;flex-wrap:wrap;
+}
+.bk-chip{
+  display:flex;flex-direction:column;gap:2px;
+  background:var(--surface3);
+  border:1px solid var(--border);
+  border-radius:4px;padding:4px 8px;
+  font-family:var(--font-mono);font-size:10px;
+  transition:.15s;min-width:70px;
+}
+.bk-chip.bk-best{
+  background:rgba(31,216,112,.06);
+  border-color:rgba(31,216,112,.25);
+}
+.bk-name{
+  color:var(--text3);font-size:9px;
+  font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+  padding-bottom:2px;margin-bottom:1px;
+}
+.bk-chip.bk-best .bk-name{color:var(--green)}
+.bk-line-row{
+  display:flex;justify-content:space-between;
+  align-items:center;gap:4px;
+}
+.bk-line-label{
+  font-size:8px;color:var(--text3);
+  font-weight:600;
+}
+.bk-price{font-weight:700;color:var(--text2);font-size:10px}
+.bk-chip.bk-best .bk-price{color:var(--green)}
+.bk-best-label{
+  font-family:var(--font-mono);font-size:8px;
+  font-weight:700;color:var(--green);
+  letter-spacing:.5px;margin-top:2px;
+  align-self:flex-end;
+}
 
 /* Table cells */
 .tc{font-size:12px;color:var(--text2)}
@@ -1321,6 +1362,39 @@ function renderPlayers(players, isResult){
     const odds_cls   = odds_moved==='up'?'om-up':odds_moved==='down'?'om-dn':'om-fl';
     const ev_cls     = p.ev>0?'ev-pos':'ev-neg';
 
+    // Build bookmaker comparison row with both 0.5 and 1.5 lines
+    const books    = p.books||{};
+    const bestBook = p.bestBook||'';
+    const bestLine = p.bestLine||p.line||0.5;
+    let bkRow = '';
+    if(Object.keys(books).length > 0){
+      const chips = Object.entries(books).map(([name, lineOdds])=>{
+        const isBest = name===bestBook;
+        // lineOdds is {0.5: price, 1.5: price}
+        let lineRows = '';
+        const sortedLines = Object.keys(lineOdds).map(Number).sort();
+        sortedLines.forEach(ln=>{
+          const pr = lineOdds[ln];
+          lineRows += `<div class="bk-line-row">
+            <span class="bk-line-label">${ln} SOT</span>
+            <span class="bk-price">${pr.toFixed(2)}</span>
+          </div>`;
+        });
+        // Fallback if lineOdds is just a number (old format)
+        if(typeof lineOdds === 'number'){
+          lineRows = `<div class="bk-line-row">
+            <span class="bk-line-label">${bestLine} SOT</span>
+            <span class="bk-price">${lineOdds.toFixed(2)}</span>
+          </div>`;
+        }
+        return `<div class="bk-chip ${isBest?'bk-best':''}">
+          <span class="bk-name">${name}${isBest?' ✅':''}</span>
+          ${lineRows}
+        </div>`;
+      }).join('');
+      bkRow = `<div class="bk-odds-row">${chips}</div>`;
+    }
+
     let rightCol='';
     if(isResult && p.actualSOT!==undefined){
       rightCol=`<div class="result-col ${p.hit?'r-hit':'r-miss'}">${p.actualSOT} SOT ${p.hit?'✓':'✗'}</div>`;
@@ -1334,6 +1408,12 @@ function renderPlayers(players, isResult){
           ${p.name}
           <span class="pi-role r-${p.role||'ST'}">${p.role||'ST'}</span>
           ${isBanker?'<span style="font-size:11px">🏦</span>':''}
+          <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;
+            color:var(--gold);background:rgba(240,192,64,.1);
+            border:1px solid rgba(240,192,64,.2);
+            padding:1px 6px;border-radius:3px;margin-left:2px;">
+            ${p.line||0.5} SOT
+          </span>
         </div>
         <div class="pi-sub">
           <div class="status-dot s-${p.status||'unknown'}"></div>
@@ -1341,6 +1421,7 @@ function renderPlayers(players, isResult){
           · ${p.minutes||90}m
           ${p.isValue?'· <span class="val-tag">VALUE</span>':''}
         </div>
+        ${bkRow}
       </div>
       <div class="xsot-val">${(p.xsot||0).toFixed(2)}</div>
       <div class="line-val">${p.line||0.5}</div>
@@ -1558,12 +1639,18 @@ function fallback(){
           oddsOpen:1.68,oddsCurrent:1.65,oddsMoved:'up',oddsPctMove:1.8,
           ev:.054,isValue:true,verdict:'SAFE',banker:false,
           status:'confirmed',statusReason:'Starting XI',lineupConfirmed:true,
-          form:[1,1,0,1,1,0],avgSot:.82,avgXg:.21,dataSource:'understat',dataTier:'A'},
+          form:[1,1,0,1,1,0],avgSot:.82,avgXg:.21,dataSource:'understat',dataTier:'A',
+          realOdds:true,bestBook:'Parimatch',bestLine:0.5,
+          lines:{0.5:1.68,1.5:2.80},
+          books:{'1xBet':{0.5:1.65,1.5:2.75},'Parimatch':{0.5:1.68,1.5:2.80},'Betano':{0.5:1.62,1.5:2.70}}},
          {name:'E. Haaland',role:'ST',minutes:90,line:1.5,xsot:1.85,prob:.82,conf:9,
           oddsOpen:1.95,oddsCurrent:1.88,oddsMoved:'up',oddsPctMove:3.6,
           ev:.139,isValue:true,verdict:'SAFE',banker:true,
           status:'confirmed',statusReason:'Starting XI',lineupConfirmed:true,
-          form:[1,1,1,1,0,1],avgSot:1.62,avgXg:.68,dataSource:'understat',dataTier:'A'},
+          form:[1,1,1,1,0,1],avgSot:1.62,avgXg:.68,dataSource:'understat',dataTier:'A',
+          realOdds:true,bestBook:'Parimatch',bestLine:1.5,
+          lines:{0.5:1.42,1.5:1.90},
+          books:{'1xBet':{0.5:1.38,1.5:1.85},'Parimatch':{0.5:1.42,1.5:1.90},'Betano':{0.5:1.35,1.5:1.82}}},
          {name:'K. Havertz',role:'ST',minutes:85,line:.5,xsot:1.18,prob:.69,conf:7,
           oddsOpen:1.75,oddsCurrent:1.72,oddsMoved:'flat',oddsPctMove:0,
           ev:.019,isValue:false,verdict:'RISKY',banker:false,
@@ -1603,6 +1690,9 @@ function fallback(){
           ev:.117,isValue:true,verdict:'SAFE',banker:true,
           status:'confirmed',statusReason:'Starting XI',lineupConfirmed:true,
           form:[1,1,1,0,1,1],avgSot:1.55,avgXg:.62,dataSource:'understat',dataTier:'A',
+          realOdds:true,bestBook:'1xBet',bestLine:1.5,
+          lines:{0.5:1.30,1.5:1.88},
+          books:{'1xBet':{0.5:1.30,1.5:1.88},'Parimatch':{0.5:1.28,1.5:1.85},'Betano':{0.5:1.25,1.5:1.82}},
           actualSOT:2,actualShots:4,actualXG:.84,hit:true},
          {name:'C. Palmer',role:'CAM',minutes:90,line:.5,xsot:1.02,prob:.63,conf:6,
           oddsOpen:1.78,oddsCurrent:1.80,oddsMoved:'down',oddsPctMove:1.1,
