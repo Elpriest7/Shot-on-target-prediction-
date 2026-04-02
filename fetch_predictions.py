@@ -225,8 +225,266 @@ def get_fbref_players(fbref_id):
         return {}
 
 # ══════════════════════════════════════════
-# MATH ENGINE
+# MATH ENGINE — ELITE UPGRADES
 # ══════════════════════════════════════════
+
+# ── PUBLIC BIAS PLAYERS & MATCHES (Upgrade 4) ──
+# These attract public money → lines shorter than fair value
+# We discount model probability to avoid overconfidence
+PUBLIC_BIAS_PLAYERS = {
+    # name fragment : discount factor
+    "haaland":  0.94,
+    "mbappe":   0.93,
+    "salah":    0.95,
+    "vinicius": 0.94,
+    "bellingham":0.95,
+    "ronaldo":  0.93,
+    "neymar":   0.93,
+    "lewandowski":0.95,
+    "kane":     0.95,
+    "yamal":    0.94,
+    "saka":     0.96,
+    "osimhen":  0.95,
+}
+
+PUBLIC_BIAS_LEAGUES = {
+    "ucl": 0.96,   # Champions League — biggest public bias
+    "uel": 0.97,   # Europa League
+}
+
+def apply_public_bias(prob, player_name, league_key):
+    """Discount probability for public bias players/leagues (Upgrade 4)"""
+    nl = player_name.lower()
+    factor = 1.0
+    # Check player bias
+    for fragment, disc in PUBLIC_BIAS_PLAYERS.items():
+        if fragment in nl:
+            factor = min(factor, disc)
+            break
+    # Check league bias
+    league_disc = PUBLIC_BIAS_LEAGUES.get(league_key, 1.0)
+    factor = min(factor, league_disc)
+    return round(prob * factor, 3)
+
+# ── CALIBRATION LAYER (Upgrade 2) ──
+# Corrects model overconfidence based on historical results
+# calibration_factor = actual_hit_rate / predicted_probability_avg
+# Starts neutral (1.0) and adjusts as history builds
+
+def get_calibration_factor(history_summary, verdict_type="SAFE"):
+    """
+    Calculate calibration factor from historical results.
+    If model predicts 75% avg but hits 68% → factor = 0.68/0.75 = 0.907
+    Requires at least 30 predictions to be meaningful.
+    """
+    if not history_summary:
+        return 1.0
+    s = history_summary.get(verdict_type.lower(), {})
+    total = s.get("total", 0)
+    if total < 30:
+        # Not enough data yet — return slight conservative adjustment
+        return 0.97
+    hit_rate  = s.get("rate", 75) / 100
+    # Estimate avg predicted probability for this verdict type
+    avg_pred = 0.75 if verdict_type == "SAFE" else 0.65
+    if avg_pred <= 0:
+        return 1.0
+    factor = hit_rate / avg_pred
+    # Clamp between 0.80 and 1.10 to prevent wild swings
+    return round(max(0.80, min(1.10, factor)), 3)
+
+def apply_calibration(prob, calibration_factor):
+    """Apply calibration correction to model probability (Upgrade 2)"""
+    calibrated = prob * calibration_factor
+    return round(max(0.01, min(0.97, calibrated)), 3)
+
+# ── PLAYER SPECIFIC MODIFIERS (Upgrade 3) ──
+
+def calc_finishing_efficiency(avg_sot, avg_shots):
+    """
+    SOT/shots ratio — finishing efficiency modifier.
+    Elite: >0.55 (55%+ of shots on target)
+    Average: 0.35-0.55
+    Poor: <0.35
+    """
+    if avg_shots <= 0:
+        return 1.0
+    ratio = avg_sot / avg_shots
+    if ratio >= 0.60: return 1.12   # Elite converter
+    if ratio >= 0.50: return 1.06   # Above average
+    if ratio >= 0.40: return 1.0    # Average
+    if ratio >= 0.30: return 0.94   # Below average
+    return 0.88                      # Poor converter
+
+def calc_overperformance_trend(avg_sot, avg_xg):
+    """
+    Check if player consistently overperforms xG → SOT gap.
+    avg_sot >> xG*2 means player shoots more than xG suggests.
+    """
+    if avg_xg <= 0:
+        return 1.0
+    xg_implied_sot = avg_xg * 2.5  # Expected SOT from xG
+    if avg_sot <= 0:
+        return 1.0
+    ratio = avg_sot / xg_implied_sot
+    if ratio >= 1.3: return 1.08    # Consistently overperforms
+    if ratio >= 1.1: return 1.03
+    if ratio >= 0.9: return 1.0     # In line with xG
+    if ratio >= 0.7: return 0.96    # Underperforms
+    return 0.92                      # Consistent underperformer
+
+def apply_player_modifiers(xsot, avg_sot, avg_shots, avg_xg):
+    """Apply finishing efficiency and overperformance trend (Upgrade 3)"""
+    fin_eff  = calc_finishing_efficiency(avg_sot, avg_shots)
+    overperf = calc_overperformance_trend(avg_sot, avg_xg)
+    modified = xsot * fin_eff * overperf
+    return round(max(0.01, modified), 2)
+
+# ── CONFIDENCE TIGHTENING (Upgrade 5) ──
+# Stricter criteria — fewer but better picks
+
+TIGHT_THRESHOLDS = {
+    "SAFE_PROB":     0.75,   # Minimum probability for SAFE
+    "SAFE_CONF":     8,      # Minimum confidence for SAFE
+    "SAFE_EV":       0.03,   # Minimum EV for SAFE (3%)
+    "BANKER_PROB":   0.82,   # Minimum probability for BANKER
+    "BANKER_CONF":   9,      # Minimum confidence for BANKER
+    "BANKER_EV":     0.06,   # Minimum EV for BANKER (6%)
+    "BANKER_SOT":    1.2,    # Minimum avg SOT for BANKER
+    "BANKER_FORM":   0.55,   # Minimum form rate for BANKER
+    "VALUE_EDGE":    0.05,   # Minimum edge over implied prob
+    "REAL_ODDS_BONUS": 0.02, # Extra EV buffer required without real odds
+}
+
+def get_tight_verdict(prob, conf, ev, high_var, status, real_odds, calibration_factor, league_key):
+    """
+    Tightened verdict system (Upgrade 5).
+    Fewer picks but much higher quality.
+    """
+    if high_var or status == "injured":
+        return "AVOID"
+
+    # Extra penalty if no real odds available
+    ev_threshold = TIGHT_THRESHOLDS["SAFE_EV"]
+    if not real_odds:
+        ev_threshold += TIGHT_THRESHOLDS["REAL_ODDS_BONUS"]
+
+    # UCL/derby extra caution
+    if league_key in ["ucl","uel"]:
+        ev_threshold += 0.01
+
+    if (prob >= TIGHT_THRESHOLDS["SAFE_PROB"] and
+        conf >= TIGHT_THRESHOLDS["SAFE_CONF"] and
+        ev  >= ev_threshold):
+        return "SAFE"
+
+    if prob >= 0.65 or conf >= 6:
+        return "RISKY"
+
+    return "AVOID"
+
+def is_tight_banker(prob, conf, ev, avg_sot, form, real_odds):
+    """Stricter banker criteria (Upgrade 5)"""
+    form_rate = sum(form) / max(len(form), 1)
+    ev_min = TIGHT_THRESHOLDS["BANKER_EV"]
+    if not real_odds:
+        ev_min += 0.02  # Require more edge without real odds
+    return (
+        prob      >= TIGHT_THRESHOLDS["BANKER_PROB"] and
+        conf      >= TIGHT_THRESHOLDS["BANKER_CONF"] and
+        ev        >= ev_min and
+        avg_sot   >= TIGHT_THRESHOLDS["BANKER_SOT"] and
+        form_rate >= TIGHT_THRESHOLDS["BANKER_FORM"]
+    )
+
+# ── CLV TRACKING (Upgrade 1) ──
+# Closing Line Value: compare prediction odds vs closing odds
+# If you consistently beat closing line → long term profitable
+
+def calc_clv(open_odds, closing_odds):
+    """
+    CLV = (closing_odds - open_odds) / open_odds × 100
+    Positive CLV means you got better odds than market settled at.
+    This is the strongest predictor of long-term profitability.
+    """
+    if not closing_odds or not open_odds or open_odds <= 0:
+        return None
+    clv = (closing_odds - open_odds) / open_odds * 100
+    return round(clv, 2)
+
+def update_clv_in_history(history, closing_odds_data):
+    """
+    Update yesterday's predictions with closing odds for CLV calculation.
+    closing_odds_data: {player_name: closing_odds}
+    """
+    updated = 0
+    for pred in history.get("predictions", []):
+        pname = pred.get("player","").lower()
+        if pname in closing_odds_data and "clv" not in pred:
+            closing = closing_odds_data.get(pname)
+            open_o  = pred.get("oddsCurrent", 0)
+            clv     = calc_clv(open_o, closing)
+            if clv is not None:
+                pred["clv"] = clv
+                updated += 1
+    if updated:
+        print(f"  CLV updated for {updated} predictions")
+    return history
+
+def calc_clv_summary(predictions):
+    """
+    Calculate average CLV from predictions that have closing odds.
+    Positive avg CLV = profitable model regardless of short-term results.
+    """
+    clv_preds = [p for p in predictions if "clv" in p]
+    if not clv_preds:
+        return {"avg_clv": None, "positive_clv_rate": None, "total": 0}
+    avg_clv = round(sum(p["clv"] for p in clv_preds) / len(clv_preds), 2)
+    pos_rate = round(len([p for p in clv_preds if p["clv"] > 0]) / len(clv_preds) * 100)
+    return {
+        "avg_clv":         avg_clv,
+        "positive_clv_rate": pos_rate,
+        "total":           len(clv_preds),
+        "beating_market":  avg_clv > 0
+    }
+
+def fetch_closing_odds(sport_key, event_id, player_names):
+    """
+    Fetch closing odds (post-kickoff) for CLV calculation.
+    Uses The Odds API — same endpoint but called after match starts.
+    """
+    if not THEODDS_KEY or not event_id or not sport_key:
+        return {}
+    try:
+        r = requests.get(
+            f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds",
+            params={
+                "apiKey":    THEODDS_KEY,
+                "regions":   "uk,eu",
+                "markets":   "player_shots_on_target",
+                "oddsFormat":"decimal"
+            },
+            timeout=15)
+        if r.status_code != 200:
+            return {}
+        data    = r.json()
+        closing = {}
+        for bk in data.get("bookmakers", []):
+            for market in bk.get("markets", []):
+                if market.get("key") != "player_shots_on_target":
+                    continue
+                for outcome in market.get("outcomes", []):
+                    pname = outcome.get("description","").lower()
+                    side  = outcome.get("name","").lower()
+                    price = outcome.get("price", 0)
+                    if "over" in side and pname:
+                        # Keep highest closing odds found
+                        if pname not in closing or price > closing[pname]:
+                            closing[pname] = price
+        return closing
+    except Exception as e:
+        print(f"  CLV fetch err: {e}")
+        return {}
 
 def calc_xsot(avg_sot, avg_shots, avg_xg, role, t_att, o_def, mins):
     rm = ROLE_FACTORS.get(role, 1.0)
@@ -628,11 +886,13 @@ def calc_summary(preds):
     staked   = len([p for p in preds if p["verdict"] in ["SAFE","RISKY"]])
     ret      = sum(p.get("oddsCurrent",1.8) for p in preds if p["verdict"] in ["SAFE","RISKY"] and p["hit"])
     roi      = round((ret-staked)/max(staked,1)*100,1)
+    clv_summary = calc_clv_summary(preds)
     return {
         "safe":stats(safe_p),"risky":stats(risky_p),
         "banker":stats(banker_p),"all":stats(preds),
         "roi":roi,"totalPredictions":len(preds),
-        "daysTracked":len(set(p["date"] for p in preds))
+        "daysTracked":len(set(p["date"] for p in preds)),
+        "clv": clv_summary,
     }
 
 # ══════════════════════════════════════════
@@ -700,7 +960,8 @@ def enrich_with_fbref(players, fbref_data):
                 break
     return players
 
-def process_fixtures(fixtures, day_label, match_date_str):
+def process_fixtures(fixtures, day_label, match_date_str, history=None):
+    if history is None: history = {}
     matches = []
     count   = 0
     for fix in fixtures:
@@ -764,10 +1025,27 @@ def process_fixtures(fixtures, day_label, match_date_str):
                 # Resolve real or estimated player SOT odds
                 p_odds  = resolve_player_odds(p["name"], sot_lines, prob, match_odds)
                 curr_o  = p_odds["current"]
+                real_odds = p_odds["realOdds"]
                 # If real SOT line found, update the betting line too
-                if p_odds["realOdds"] and p_odds["line"] is not None:
+                if real_odds and p_odds["line"] is not None:
                     line = p_odds["line"]
                     prob = calc_prob(xsot, line)  # recalc with real line
+
+                # ── UPGRADE 3: Player specific modifiers ──
+                xsot = apply_player_modifiers(xsot, p["avg_sot"], p["avg_shots"], p["avg_xg"])
+                prob = calc_prob(xsot, line)  # recalc after modifiers
+
+                # ── UPGRADE 4: Public bias filter ──
+                prob = apply_public_bias(prob, p["name"], lg["key"])
+
+                # ── UPGRADE 2: Calibration layer ──
+                calib_factor = get_calibration_factor(
+                    history.get("summary",{}),
+                    "SAFE" if prob >= 0.75 else "RISKY"
+                )
+                prob = apply_calibration(prob, calib_factor)
+
+                # Recalc EV and implied after all probability adjustments
                 ev      = calc_ev(prob, curr_o)
                 implied = round(1/curr_o, 3)
 
@@ -776,7 +1054,14 @@ def process_fixtures(fixtures, day_label, match_date_str):
                 if status=="injured": prob=0.0; conf=1
                 elif status=="sub":   prob=round(prob*0.6,3); conf=max(1,conf-2)
 
-                verdict = get_verdict(prob,conf,ev,is_hv,status)
+                # Recalc confidence after adjustments
+                conf = calc_conf(prob, p["avg_sot"], p["avg_mins"], p["games"], tier)
+
+                # ── UPGRADE 5: Tight verdict system ──
+                verdict = get_tight_verdict(
+                    prob, conf, ev, is_hv, status,
+                    real_odds, calib_factor, lg["key"]
+                )
 
                 # Form history
                 form, history_detail = [1 if i%2==0 else 0 for i in range(6)], []
@@ -789,8 +1074,12 @@ def process_fixtures(fixtures, day_label, match_date_str):
                 if day_label=="yesterday" and us_id and tier=="A":
                     actual = us_yesterday_sot(us_id, match_date_str)
 
-                # Banker detection
-                banker = is_banker(prob,conf,ev,p["avg_sot"],form)
+                # ── UPGRADE 5: Tight banker criteria ──
+                banker = is_tight_banker(prob, conf, ev, p["avg_sot"], form, real_odds)
+
+                # ── Modifier metadata for display ──
+                fin_eff  = calc_finishing_efficiency(p["avg_sot"], p["avg_shots"])
+                overperf = calc_overperformance_trend(p["avg_sot"], p["avg_xg"])
 
                 entry = {
                     "name":    p["name"],
@@ -821,7 +1110,11 @@ def process_fixtures(fixtures, day_label, match_date_str):
                     "avgXg":   p["avg_xg"],
                     "dataSource": src,
                     "dataTier":   tier,
-                    "matchHistory": history_detail[:6]
+                    "matchHistory": history_detail[:6],
+                    "calibFactor":  calib_factor,
+                    "finEfficiency": round(fin_eff, 2),
+                    "overperf":     round(overperf, 2),
+                    "publicBias":   p["name"].lower() in " ".join(PUBLIC_BIAS_PLAYERS.keys()) or lg["key"] in PUBLIC_BIAS_LEAGUES,
                 }
                 if actual:
                     entry.update({"actualSOT":actual["actualSOT"],
@@ -848,7 +1141,10 @@ def process_fixtures(fixtures, day_label, match_date_str):
             "isLive":False,"isHighVariance":is_hv,
             "lineupConfirmed":lu_confirmed,
             "matchOdds":match_odds,
-            "players":all_players[:8]
+            "players":all_players[:8],
+            # Internal fields for CLV tracking
+            "_lid":lid,
+            "_event_id":event_id,
         })
     return matches
 
@@ -946,25 +1242,44 @@ all_matches = []
 
 print("\n[1/3] Yesterday + results...")
 y_fixes   = get_fixtures(fmt(yesterday))
-y_matches = process_fixtures(y_fixes,"yesterday",fmt(yesterday))
+y_matches = process_fixtures(y_fixes,"yesterday",fmt(yesterday),history)
 all_matches += y_matches
 print(f"  {len(y_matches)} matches")
 
 print("\n[2/3] Today + predictions...")
 t_fixes   = get_fixtures(fmt(today))
-t_matches = process_fixtures(t_fixes,"today",fmt(today))
+t_matches = process_fixtures(t_fixes,"today",fmt(today),history)
 all_matches += t_matches
 print(f"  {len(t_matches)} matches")
 
 print("\n[3/3] Tomorrow...")
 tm_fixes   = get_fixtures(fmt(tomorrow))
-tm_matches = process_fixtures(tm_fixes,"tomorrow",fmt(tomorrow))
+tm_matches = process_fixtures(tm_fixes,"tomorrow",fmt(tomorrow),history)
 all_matches += tm_matches
 print(f"  {len(tm_matches)} matches")
 
-# Update history
+# Update history with results
 y_all = [m for m in all_matches if m["day"]=="yesterday"]
 history = update_history(y_all, history)
+
+# ── UPGRADE 1: CLV — fetch closing odds for yesterday's matches ──
+print("\nFetching closing odds for CLV...")
+closing_all = {}
+for m in y_all:
+    sport_key = THEODDS_LEAGUES.get(m.get("_lid",0),"")
+    # Use stored event_id if available
+    ev_id = m.get("_event_id","")
+    if sport_key and ev_id:
+        player_names = [p["name"].lower() for p in m.get("players",[])]
+        closing = fetch_closing_odds(sport_key, ev_id, player_names)
+        closing_all.update(closing)
+
+if closing_all:
+    history = update_clv_in_history(history, closing_all)
+    print(f"  CLV data: {len(closing_all)} players")
+else:
+    print("  No closing odds available yet (matches may not have started)")
+
 save_history(history)
 
 # AI
@@ -990,12 +1305,14 @@ print(f"\nToday — Safe:{safe_c} Bankers:{banker_c} EV+:{ev_c} Value:{value_c} 
 if hit_rate is not None:
     print(f"Yesterday — {y_hits}/{len(y_p)} hit ({hit_rate}%)")
 
+clv_sum = history.get("summary",{}).get("clv",{})
 output = {
     "updated":        datetime.utcnow().isoformat()+"Z",
     "aiInsight":      insight,
     "resultsSummary": results_summary,
     "hitRate":        hit_rate,
     "historySummary": history.get("summary",{}),
+    "clvSummary":     clv_sum,
     "matches":        all_matches
 }
 
