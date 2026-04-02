@@ -304,10 +304,24 @@ def get_theodds_events(sport_key):
         print(f"  TheOddsAPI events err: {e}")
         return []
 
+# ── Nigerian bookmaker keys on The Odds API ──
+NIGERIAN_BOOKS = {
+    "onexbet":   "1xBet",
+    "parimatch": "Parimatch",
+    "betano":    "Betano",
+}
+
 def get_player_sot_lines(sport_key, event_id, home_team, away_team):
     """
     Fetch real player_shots_on_target lines from The Odds API.
-    Returns dict: {player_name_lower: {line, over_odds, under_odds, bookmaker}}
+    Collects odds from 1xBet, Parimatch and Betano specifically.
+    Returns dict: {
+        player_name_lower: {
+            line, best_odds, best_book,
+            books: {1xBet: odds, Parimatch: odds, Betano: odds},
+            found: True
+        }
+    }
     """
     cache_key = f"{sport_key}:{event_id}"
     if cache_key in theodds_props_cache:
@@ -323,15 +337,16 @@ def get_player_sot_lines(sport_key, event_id, home_team, away_team):
                 "apiKey":    THEODDS_KEY,
                 "regions":   "uk,eu",
                 "markets":   "player_shots_on_target",
-                "oddsFormat":"decimal"
+                "oddsFormat":"decimal",
+                "bookmakers":"onexbet,parimatch,betano"
             },
             timeout=15)
 
         remaining = r.headers.get("x-requests-remaining","?")
-        print(f"  SOT lines for {home_team} vs {away_team} | Credits left: {remaining}")
+        print(f"  SOT lines {home_team} vs {away_team} | Credits left: {remaining}")
 
         if r.status_code != 200:
-            print(f"  TheOddsAPI props error: {r.status_code} — {r.text[:100]}")
+            print(f"  TheOddsAPI error: {r.status_code} — {r.text[:120]}")
             theodds_props_cache[cache_key] = {}
             return {}
 
@@ -339,30 +354,73 @@ def get_player_sot_lines(sport_key, event_id, home_team, away_team):
         props = {}
 
         for bookmaker in data.get("bookmakers", []):
-            bk_name = bookmaker.get("title","")
+            bk_key  = bookmaker.get("key","")
+            bk_name = NIGERIAN_BOOKS.get(bk_key, bookmaker.get("title",""))
+            if bk_key not in NIGERIAN_BOOKS:
+                continue  # skip non-Nigerian books
+
             for market in bookmaker.get("markets", []):
                 if market.get("key") != "player_shots_on_target":
                     continue
                 for outcome in market.get("outcomes", []):
-                    pname  = outcome.get("description","").lower()
-                    side   = outcome.get("name","").lower()   # "Over" or "Under"
-                    price  = outcome.get("price", 0)
-                    point  = outcome.get("point", 0.5)
-                    if not pname: continue
+                    pname = outcome.get("description","").lower()
+                    side  = outcome.get("name","").lower()
+                    price = outcome.get("price", 0)
+                    point = float(outcome.get("point", 0.5))
+                    if not pname or "over" not in side:
+                        continue
 
                     if pname not in props:
                         props[pname] = {
-                            "line":       point,
-                            "over_odds":  None,
-                            "under_odds": None,
-                            "bookmaker":  bk_name,
-                            "found":      True
+                            "lines":     {},   # {0.5: best_odds, 1.5: best_odds}
+                            "best_odds": 0,
+                            "best_book": "",
+                            "best_line": 0.5,
+                            # per bookmaker: {bk_name: {0.5: odds, 1.5: odds}}
+                            "books":     {},
+                            "found":     True
                         }
-                    if "over" in side:
-                        props[pname]["over_odds"]  = price
-                        props[pname]["line"]        = point
-                    elif "under" in side:
-                        props[pname]["under_odds"] = price
+
+                    # Store per-bookmaker per-line odds
+                    if bk_name not in props[pname]["books"]:
+                        props[pname]["books"][bk_name] = {}
+                    props[pname]["books"][bk_name][point] = price
+
+                    # Store best odds across all lines/books
+                    if price > props[pname]["best_odds"]:
+                        props[pname]["best_odds"] = price
+                        props[pname]["best_book"] = bk_name
+                        props[pname]["best_line"] = point
+
+                    # Store best odds per line
+                    if point not in props[pname]["lines"] or price > props[pname]["lines"][point]:
+                        props[pname]["lines"][point] = price
+
+        # Fallback: capture from any bookmaker if none of the 3 found
+        if not props:
+            for bookmaker in data.get("bookmakers", []):
+                bk_name = bookmaker.get("title","")
+                for market in bookmaker.get("markets", []):
+                    if market.get("key") != "player_shots_on_target":
+                        continue
+                    for outcome in market.get("outcomes", []):
+                        pname = outcome.get("description","").lower()
+                        side  = outcome.get("name","").lower()
+                        price = outcome.get("price", 0)
+                        point = float(outcome.get("point", 0.5))
+                        if not pname or "over" not in side:
+                            continue
+                        if pname not in props:
+                            props[pname] = {"lines":{},"best_odds":0,"best_book":"","best_line":0.5,"books":{},"found":True}
+                        if bk_name not in props[pname]["books"]:
+                            props[pname]["books"][bk_name] = {}
+                        props[pname]["books"][bk_name][point] = price
+                        if price > props[pname]["best_odds"]:
+                            props[pname]["best_odds"] = price
+                            props[pname]["best_book"] = bk_name
+                            props[pname]["best_line"] = point
+                        if point not in props[pname]["lines"] or price > props[pname]["lines"][point]:
+                            props[pname]["lines"][point] = price
 
         theodds_props_cache[cache_key] = props
         print(f"  Found SOT lines for {len(props)} players")
@@ -419,35 +477,38 @@ def get_match_h2h_odds(sport_key, home, away):
 
 def resolve_player_odds(player_name, sot_lines, prob, match_odds):
     """
-    Try to get real SOT line odds for a player.
+    Try to get real SOT line odds for a player from Nigerian bookmakers.
     Falls back to estimated odds if not found.
+    Returns odds info including per-bookmaker breakdown.
     """
     nl = player_name.lower()
     real_line = None
 
-    # Try to match player name in SOT lines
+    # Fuzzy match player name against SOT lines
     for key, val in sot_lines.items():
-        # Match if any part of name matches
         name_parts = [p for p in nl.split() if len(p)>3]
         if any(part in key for part in name_parts):
             real_line = val
             break
 
-    if real_line and real_line.get("over_odds"):
+    if real_line and real_line.get("best_odds",0) > 0:
         # Real bookmaker SOT line found!
-        open_o   = round(real_line["over_odds"] * 1.03, 2)  # estimate opening as 3% wider
-        curr_o   = real_line["over_odds"]
-        line     = real_line["line"]
-        moved    = "up" if curr_o < open_o else "flat"
-        pct_move = abs(round((curr_o - open_o) / open_o * 100, 1))
+        best_o   = real_line["best_odds"]
+        best_line= real_line.get("best_line", 0.5)
+        open_o   = round(best_o * 1.03, 2)
+        moved    = "up" if best_o < open_o else "flat"
+        pct_move = abs(round((best_o - open_o) / open_o * 100, 1))
         return {
             "open":      open_o,
-            "current":   curr_o,
-            "line":      line,
+            "current":   best_o,
+            "line":      best_line,
             "moved":     moved,
             "pctMove":   pct_move,
             "realOdds":  True,
-            "bookmaker": real_line.get("bookmaker","")
+            "best_book": real_line.get("best_book",""),
+            "best_line": best_line,
+            "books":     real_line.get("books",{}),   # {bk: {0.5: odds, 1.5: odds}}
+            "lines":     real_line.get("lines",{}),   # {0.5: best_odds, 1.5: best_odds}
         }
     else:
         # Fallback: estimate from match odds + probability
@@ -459,13 +520,14 @@ def resolve_player_odds(player_name, sot_lines, prob, match_odds):
         curr_o = max(1.10, min(round(open_o-drift,2), 5.0))
         moved  = "up" if curr_o<open_o else "down" if curr_o>open_o else "flat"
         return {
-            "open":     open_o,
-            "current":  curr_o,
-            "line":     None,  # use model line
-            "moved":    moved,
-            "pctMove":  abs(round((curr_o-open_o)/open_o*100,1)),
-            "realOdds": False,
-            "bookmaker":""
+            "open":      open_o,
+            "current":   curr_o,
+            "line":      None,
+            "moved":     moved,
+            "pctMove":   abs(round((curr_o-open_o)/open_o*100,1)),
+            "realOdds":  False,
+            "best_book": "",
+            "books":     {},
         }
 
 # ══════════════════════════════════════════
@@ -743,7 +805,10 @@ def process_fixtures(fixtures, day_label, match_date_str):
                     "oddsMoved":   p_odds["moved"],
                     "oddsPctMove": p_odds["pctMove"],
                     "realOdds":    p_odds["realOdds"],
-                    "bookmaker":   p_odds["bookmaker"],
+                    "bestBook":    p_odds.get("best_book",""),
+                    "bestLine":    p_odds.get("best_line", line),
+                    "books":       p_odds.get("books",{}),
+                    "lines":       p_odds.get("lines",{}),
                     "ev":      ev,
                     "isValue": (prob-implied)>0.05,
                     "verdict": verdict,
