@@ -613,6 +613,51 @@ header{
   letter-spacing:.5px;margin-top:2px;
   align-self:flex-end;
 }
+/* CLV & Elite badges */
+.clv-badge{
+  font-family:var(--font-mono);font-size:8px;
+  font-weight:700;padding:1px 6px;border-radius:3px;
+  letter-spacing:.5px;
+}
+.clv-pos{background:rgba(31,216,112,.1);border:1px solid rgba(31,216,112,.2);color:var(--green)}
+.clv-neg{background:rgba(255,53,53,.08);border:1px solid rgba(255,53,53,.2);color:var(--red)}
+.calib-tag{
+  font-family:var(--font-mono);font-size:8px;
+  color:var(--cyan);letter-spacing:.3px;
+}
+.bias-tag{
+  font-family:var(--font-mono);font-size:8px;
+  font-weight:700;
+  background:rgba(255,112,32,.08);
+  border:1px solid rgba(255,112,32,.2);
+  color:var(--orange);
+  padding:1px 5px;border-radius:3px;
+}
+/* Elite filter banner */
+.elite-banner{
+  background:linear-gradient(135deg,rgba(240,192,64,.06),rgba(31,216,112,.04));
+  border:1px solid rgba(240,192,64,.15);
+  border-radius:6px;padding:8px 14px;
+  margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:10px;
+  color:var(--text2);
+}
+.elite-icon{font-size:14px}
+.clv-summary-box{
+  background:var(--surface2);border-radius:5px;
+  padding:10px 12px;margin-top:8px;
+}
+.clv-summary-row{
+  display:flex;justify-content:space-between;
+  font-family:var(--font-mono);font-size:10px;
+  margin-bottom:4px;
+}
+.clv-summary-row:last-child{margin-bottom:0}
+.clv-summary-lbl{color:var(--text3)}
+.clv-summary-val{font-weight:700}
+.clv-beat{color:var(--green)}
+.clv-lose{color:var(--red)}
 
 /* Table cells */
 .tc{font-size:12px;color:var(--text2)}
@@ -1076,6 +1121,12 @@ header{
         </div>
       </div>
 
+      <!-- ELITE BANNER -->
+      <div class="elite-banner" id="eliteBanner">
+        <span class="elite-icon">⚡</span>
+        <span id="eliteBannerText">Elite filter active — only picks with ≥75% prob, ≥8 conf, +EV shown as SAFE</span>
+      </div>
+
       <!-- MATCHES -->
       <div id="matchesWrap">
         <div class="loading-state">
@@ -1147,7 +1198,21 @@ header{
               <div class="perf-val pv-g" id="perfDays">—</div>
               <div class="perf-lbl">Days Tracked</div>
             </div>
+            <div class="perf-stat" style="grid-column:span 2">
+              <div class="perf-val" id="perfCLV" style="font-size:20px;color:var(--cyan)">—</div>
+              <div class="perf-lbl">Avg CLV (beat closing line)</div>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <!-- CLV TRACKER -->
+      <div class="sb fade-up s4">
+        <div class="sb-hdr">
+          <div class="sb-title"><span class="sb-title-icon">📉</span>CLV TRACKER</div>
+        </div>
+        <div class="sb-body" id="clvWrap">
+          <div style="color:var(--text3);font-family:var(--font-mono);font-size:11px">Building CLV data...</div>
         </div>
       </div>
 
@@ -1205,7 +1270,61 @@ function renderAll(){
   renderAI();
   renderPerformance();
   renderRiskFlags();
+  renderCLV();
   updateMetrics();
+  updateEliteBanner();
+}
+
+function renderCLV(){
+  const clv = DATA?.clvSummary||{};
+  const wrap = document.getElementById('clvWrap');
+  if(!wrap) return;
+
+  if(!clv || clv.total===0){
+    wrap.innerHTML=`<div style="color:var(--text3);font-family:var(--font-mono);font-size:10px;line-height:1.6">
+      CLV tracking builds up as matches complete.<br>
+      Needs closing odds data — typically available 2-4hrs after kickoff.
+    </div>`;
+    return;
+  }
+
+  const beating = clv.beating_market;
+  const avgClv  = clv.avg_clv;
+  const posRate  = clv.positive_clv_rate;
+
+  wrap.innerHTML=`
+    <div class="clv-summary-box">
+      <div class="clv-summary-row">
+        <span class="clv-summary-lbl">Avg CLV</span>
+        <span class="clv-summary-val ${avgClv>0?'clv-beat':'clv-lose'}">${avgClv>0?'+':''}${avgClv}%</span>
+      </div>
+      <div class="clv-summary-row">
+        <span class="clv-summary-lbl">Beat closing line</span>
+        <span class="clv-summary-val ${posRate>=50?'clv-beat':'clv-lose'}">${posRate}% of picks</span>
+      </div>
+      <div class="clv-summary-row">
+        <span class="clv-summary-lbl">Picks tracked</span>
+        <span class="clv-summary-val" style="color:var(--text2)">${clv.total}</span>
+      </div>
+      <div class="clv-summary-row">
+        <span class="clv-summary-lbl">Market edge</span>
+        <span class="clv-summary-val ${beating?'clv-beat':'clv-lose'}">${beating?'✅ Beating market':'⚠️ Below market'}</span>
+      </div>
+    </div>
+    <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:8px;line-height:1.5">
+      Positive avg CLV = profitable long-term regardless of short-term results
+    </div>`;
+}
+
+function updateEliteBanner(){
+  const tm=(DATA?.matches||[]).filter(m=>m.day==='today');
+  const all=tm.flatMap(m=>m.players||[]);
+  const safe=all.filter(p=>p.verdict==='SAFE').length;
+  const banker=all.filter(p=>p.banker).length;
+  const hs = DATA?.historySummary||{};
+  const calib = hs.safe?.rate ? `Calibrated: ${hs.safe.rate}% real hit rate` : 'Calibration building...';
+  const el = document.getElementById('eliteBannerText');
+  if(el) el.textContent = `Elite filter: ${safe} safe picks · ${banker} bankers · ${calib}`;
 }
 
 // ═══════════════════════════════════════════
@@ -1420,6 +1539,8 @@ function renderPlayers(players, isResult){
           ${p.status==='confirmed'?'Starting':p.status==='doubt'?'Doubt':p.status==='injured'?'Injured':'TBC'}
           · ${p.minutes||90}m
           ${p.isValue?'· <span class="val-tag">VALUE</span>':''}
+          ${p.publicBias?'· <span class="bias-tag">⚠ PUBLIC</span>':''}
+          ${p.calibFactor&&p.calibFactor!==1?`· <span class="calib-tag">cal×${p.calibFactor}</span>`:''}
         </div>
         ${bkRow}
       </div>
@@ -1550,13 +1671,21 @@ function renderAI(){
 }
 
 function renderPerformance(){
-  const hs = DATA?.historySummary||{};
-  const s = hs.safe||{};
-  const b = hs.banker||{};
+  const hs  = DATA?.historySummary||{};
+  const s   = hs.safe||{};
+  const b   = hs.banker||{};
+  const clv = DATA?.clvSummary||{};
   document.getElementById('perfSafeRate').textContent   = s.rate!==undefined ? s.rate+'%' : '—';
   document.getElementById('perfBankerRate').textContent = b.rate!==undefined ? b.rate+'%' : '—';
   document.getElementById('perfROI').textContent        = hs.roi!==undefined ? (hs.roi>0?'+':'')+hs.roi+'%' : '—';
   document.getElementById('perfDays').textContent       = hs.daysTracked||'0';
+  if(clv.avg_clv!==undefined && clv.avg_clv!==null){
+    const clvEl = document.getElementById('perfCLV');
+    if(clvEl){
+      clvEl.textContent = (clv.avg_clv>0?'+':'')+clv.avg_clv+'%';
+      clvEl.style.color = clv.avg_clv>0 ? 'var(--green)' : 'var(--red)';
+    }
+  }
 }
 
 function renderRiskFlags(){
