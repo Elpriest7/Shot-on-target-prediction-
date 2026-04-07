@@ -900,18 +900,42 @@ def calc_summary(preds):
 # ══════════════════════════════════════════
 
 def get_fixtures(date_str):
-    try:
-        # No season filter - get all fixtures for the date across all seasons
-        r = requests.get(f"{BASE}/fixtures",headers=F_HEADERS,
-                        params={"date":date_str},timeout=15)
-        data = r.json().get("response",[])
-        print(f"  Found {len(data)} fixtures for {date_str}")
-        return data
-    except Exception as e:
-        print(f"  Fixtures err: {e}")
-        return []
+    """Fetch fixtures for a date — tries season 2025 first then no filter"""
+    all_fixtures = []
+    seen_ids = set()
+
+    for params in [
+        {"date": date_str, "season": 2025},  # Current 2025/26 season
+        {"date": date_str, "season": 2024},  # Fallback 2024/25 season
+    ]:
+        try:
+            r = requests.get(f"{BASE}/fixtures", headers=F_HEADERS,
+                           params=params, timeout=15)
+            if r.status_code != 200:
+                print(f"  Fixtures API error: {r.status_code}")
+                continue
+            data = r.json().get("response", [])
+            # Only add fixtures we haven't seen yet
+            for fix in data:
+                fid = fix["fixture"]["id"]
+                lid = fix["league"]["id"]
+                # Only include our 7 leagues
+                if lid in LEAGUES and fid not in seen_ids:
+                    all_fixtures.append(fix)
+                    seen_ids.add(fid)
+            print(f"  Season {params['season']}: {len(data)} total → {len(all_fixtures)} in our leagues for {date_str}")
+        except Exception as e:
+            print(f"  Fixtures err season {params.get('season','?')}: {e}")
+
+    print(f"  Total fixtures for {date_str}: {len(all_fixtures)}")
+    return all_fixtures
+
+_team_player_cache = {}
 
 def get_team_players_api(team_id, league_id):
+    cache_key = f"{team_id}:{league_id}"
+    if cache_key in _team_player_cache:
+        return _team_player_cache[cache_key]
     try:
         r = requests.get(f"{BASE}/players",headers=F_HEADERS,
                         params={"team":team_id,"season":2025,"league":league_id},timeout=15)
@@ -934,8 +958,11 @@ def get_team_players_api(team_id, league_id):
                     "source":   "api"
                 })
         result.sort(key=lambda x: x["avg_sot"], reverse=True)
+        _team_player_cache[cache_key] = result[:5]
         return result[:5]
-    except: return []
+    except:
+        _team_player_cache[cache_key] = []
+        return []
 
 def enrich_with_understat(players, us_data):
     for p in players:
@@ -1225,6 +1252,8 @@ Misses ✗: {', '.join(misses[:5]) if misses else 'None'}
 
 print("="*55)
 print(f"SOTIQ Bot — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+print(f"Today: {fmt(today)} | Yesterday: {fmt(yesterday)} | Tomorrow: {fmt(tomorrow)}")
+print(f"Leagues watching: {list(LEAGUES.keys())}")
 print("="*55)
 # Safety: limit total run time to avoid GitHub Actions timeout
 import signal
